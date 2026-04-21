@@ -159,6 +159,11 @@ export function RugbyField({
   const nextGroupStarted = useRef(false)
   const overlapAnimationFrameRef = useRef<number | null>(null)
   const overlappedGroupIndexRef = useRef<number | null>(null)
+  const pendingPassSnapRef = useRef<{
+    passerId: string
+    target: { x: number; y: number }
+  } | null>(null)
+  const [hoverPassEndpoint, setHoverPassEndpoint] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -571,11 +576,29 @@ export function RugbyField({
 
     if (mode === "draw" && arrowType === "pass" && passerSelected) {
       onPasserSelect(null)
+      setHoverPassEndpoint(null)
       return
     }
     
     onFieldClick(x, y)
   }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect])
+
+  const getPassTarget = useCallback((receiverId: string) => {
+    const receiver = players.find((p) => p.id === receiverId)
+    const receiverRunArrow = arrows.find((a) => {
+      const matchesReceiver =
+        a.playerId === receiverId ||
+        (receiver ? a.playerId === `attack-${receiver.number}` : false) ||
+        (receiver ? a.playerId === `defense-${receiver.number}` : false)
+      return matchesReceiver && a.arrowType !== "pass" && a.arrowType !== "decoy"
+    })
+
+    if (receiverRunArrow) {
+      return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+    }
+
+    return receiver ? { x: receiver.x, y: receiver.y } : null
+  }, [arrows, players])
 
   const handlePlayerMouseDown = useCallback((e: React.MouseEvent, player: FieldPlayer) => {
     e.stopPropagation()
@@ -591,9 +614,18 @@ export function RugbyField({
         }
         if (passerSelected === player.id) {
           onPasserSelect(null)
+          setHoverPassEndpoint(null)
           return
         }
+        const passTarget = getPassTarget(player.id)
+        if (passTarget) {
+          pendingPassSnapRef.current = {
+            passerId: passerSelected,
+            target: passTarget,
+          }
+        }
         onCreatePassArrow(passerSelected, player.id)
+        setHoverPassEndpoint(null)
         return
       }
       onBallSelect(false)
@@ -639,7 +671,27 @@ export function RugbyField({
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, getPassTarget])
+
+  useEffect(() => {
+    const pending = pendingPassSnapRef.current
+    if (!pending) return
+
+    const latestPassArrow = [...arrows]
+      .reverse()
+      .find((a) => a.arrowType === "pass" && a.playerId === pending.passerId)
+
+    if (!latestPassArrow) return
+
+    const needsUpdate =
+      Math.abs(latestPassArrow.toX - pending.target.x) > 0.001 ||
+      Math.abs(latestPassArrow.toY - pending.target.y) > 0.001
+
+    if (needsUpdate) {
+      onArrowUpdate(latestPassArrow.id, { toX: pending.target.x, toY: pending.target.y })
+    }
+    pendingPassSnapRef.current = null
+  }, [arrows, onArrowUpdate])
 
   const handleBallMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -1289,6 +1341,12 @@ export function RugbyField({
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
+        {mode === "draw" && arrowType === "pass" && hoverPassEndpoint && (
+          <g className="pointer-events-none" transform={`translate(${hoverPassEndpoint.x}, ${hoverPassEndpoint.y})`}>
+            <circle r="2.1" fill="none" stroke="#EAB308" strokeWidth="0.2" strokeDasharray="0.6,0.4" opacity="0.9" />
+            <circle r="0.35" fill="#EAB308" opacity="0.9" />
+          </g>
+        )}
 
         {/* Cone markers */}
         {cones.map((cone) => (
@@ -1368,6 +1426,17 @@ export function RugbyField({
             }`}
             transform={`translate(${renderPos.x}, ${renderPos.y})`}
             onMouseDown={(e) => handlePlayerMouseDown(e, player)}
+            onMouseEnter={() => {
+              if (mode === "draw" && arrowType === "pass") {
+                const target = getPassTarget(player.id)
+                setHoverPassEndpoint(target)
+              }
+            }}
+            onMouseLeave={() => {
+              if (mode === "draw" && arrowType === "pass") {
+                setHoverPassEndpoint(null)
+              }
+            }}
             onContextMenu={(e) => handleContextMenu(e, player.id, "player")}
           >
             <circle
