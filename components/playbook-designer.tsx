@@ -40,6 +40,7 @@ export function PlaybookDesigner() {
   const [isPaused, setIsPaused] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState<0.5 | 1 | 2>(1)
   const [hasCompletedAnimation, setHasCompletedAnimation] = useState(false)
+  const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -92,6 +93,16 @@ export function PlaybookDesigner() {
       return () => document.removeEventListener("click", handleClickOutside)
     }
   }, [arrowDropdownOpen])
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsPresentationMode(false)
+      }
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
+  }, [])
 
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
@@ -837,6 +848,27 @@ export function PlaybookDesigner() {
     setHasCompletedAnimation(true)
   }, [])
 
+  const handleEnterPresentation = useCallback(async () => {
+    try {
+      await document.documentElement.requestFullscreen()
+      setIsPresentationMode(true)
+    } catch (error) {
+      console.error("Failed to enter fullscreen:", error)
+    }
+  }, [])
+
+  const handleExitPresentation = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen()
+      }
+    } catch (error) {
+      console.error("Failed to exit fullscreen:", error)
+    } finally {
+      setIsPresentationMode(false)
+    }
+  }, [])
+
   const handleTeamColorChange = useCallback((team: "attack" | "defense", color: string) => {
     setTeamColors(prev => ({ ...prev, [team]: color }))
   }, [])
@@ -872,6 +904,7 @@ export function PlaybookDesigner() {
       {/* Main field area with toolbar */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
+        {!isPresentationMode && (
         <div className="h-10 bg-sidebar border-b border-sidebar-border flex items-center px-3 gap-2 shrink-0">
           <span className="text-[10px] text-muted-foreground mr-1">Mode:</span>
           <div className="flex rounded-md overflow-hidden border border-border">
@@ -1010,10 +1043,17 @@ export function PlaybookDesigner() {
               {playName}
             </span>
           )}
+          <button
+            onClick={handleEnterPresentation}
+            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
+          >
+            ⛶ Present
+          </button>
         </div>
+        )}
 
         {/* Field container - fills remaining space */}
-        <div className="flex-1 p-2 min-h-0">
+        <div className="relative flex-1 p-2 min-h-0">
           <RugbyField
             players={fieldPlayers}
             arrows={arrows}
@@ -1068,10 +1108,56 @@ export function PlaybookDesigner() {
             animationSpeed={animationSpeed}
             onAnimationComplete={handleAnimationComplete}
           />
+          {isPresentationMode && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-md border border-border bg-card/90 px-3 py-2">
+              <span className="text-[11px] text-foreground max-w-[200px] truncate">
+                {playName || "Untitled Play"}
+              </span>
+              {!isAnimating ? (
+                <button
+                  onClick={handlePlayAnimation}
+                  className="px-2 py-1 text-[11px] rounded border border-border bg-emerald-600/80 text-white"
+                >
+                  ▶ Play
+                </button>
+              ) : (
+                <button
+                  onClick={handlePauseAnimation}
+                  className="px-2 py-1 text-[11px] rounded border border-border bg-amber-500/90 text-black"
+                >
+                  ⏸ Pause
+                </button>
+              )}
+              <button
+                onClick={handleResetAnimation}
+                className="px-2 py-1 text-[11px] rounded border border-border bg-muted/70 text-foreground"
+              >
+                ⏹ Reset
+              </button>
+              <select
+                value={animationSpeed}
+                onChange={(e) => setAnimationSpeed(Number(e.target.value) as 0.5 | 1 | 2)}
+                className="h-7 rounded border border-border bg-background px-1 text-[11px]"
+              >
+                {[0.5, 1, 2].map((speed) => (
+                  <option key={speed} value={speed}>
+                    {speed}x
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleExitPresentation}
+                className="px-2 py-1 text-[11px] rounded border border-border bg-muted/70 text-foreground"
+              >
+                ✕ Exit
+              </button>
+            </div>
+          )}
         </div>
       </main>
 
       {/* Sidebar */}
+      {!isPresentationMode && (
       <PlaybookSidebar
         playName={playName}
         playType={playType}
@@ -1102,6 +1188,7 @@ export function PlaybookDesigner() {
         onApplyScrumFormation={handleApplyScrumFormation}
         onGenerateNotes={handleGenerateNotes}
       />
+      )}
     </div>
   )
 }
