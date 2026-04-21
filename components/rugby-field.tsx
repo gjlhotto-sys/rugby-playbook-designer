@@ -128,6 +128,7 @@ export function RugbyField({
   onTextLabelCreate,
   animationSpeed = 1,
 }: RugbyFieldProps) {
+  type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ type: "player" | "ball" | "phase" | "cone" | "label" | "arrow-start" | "arrow-mid" | "arrow-end"; id: string; offsetX: number; offsetY: number } | null>(null)
@@ -152,6 +153,9 @@ export function RugbyField({
   const animationFrameRef = useRef<number>(0)
   const isAnimatingRef = useRef(false)
   const animationDurationRef = useRef(2000)
+  const currentGroupRef = useRef(0)
+  const animationGroupsRef = useRef<SequencedArrow[][]>([])
+  const groupTimeoutRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -178,7 +182,7 @@ export function RugbyField({
     return () => window.removeEventListener("keydown", handleEsc)
   }, [onPasserSelect])
 
-  const animateTick = useCallback((timestamp: number) => {
+  const animateGroupTick = useCallback((timestamp: number, onComplete: () => void) => {
     if (!isAnimatingRef.current) return
 
     const elapsed = timestamp - animationStartTimeRef.current
@@ -202,68 +206,172 @@ export function RugbyField({
     setAnimatedPositions(newPositions)
 
     if (rawProgress < 1) {
-      animationFrameRef.current = requestAnimationFrame(animateTick)
+      animationFrameRef.current = requestAnimationFrame((ts) => animateGroupTick(ts, onComplete))
     } else {
-      isAnimatingRef.current = false
-      console.log("Animation complete")
+      onComplete()
     }
   }, [])
+
+  const clearGroupTimeout = useCallback(() => {
+    if (groupTimeoutRef.current !== null) {
+      window.clearTimeout(groupTimeoutRef.current)
+      groupTimeoutRef.current = null
+    }
+  }, [])
+
+  const playNextGroup = useCallback(() => {
+    const groups = animationGroupsRef.current
+    const groupIndex = currentGroupRef.current
+
+    if (groupIndex >= groups.length) {
+      isAnimatingRef.current = false
+      console.log("Animation complete")
+      return
+    }
+
+    const currentGroup = groups[groupIndex]
+    const groupTargets: Record<string, { x: number; y: number }> = {}
+
+    currentGroup.forEach((arrow) => {
+      const player = players.find((p) =>
+        arrow.playerId === p.id ||
+        arrow.playerId === `attack-${p.number}` ||
+        arrow.playerId === `defense-${p.number}` ||
+        arrow.playerId === `defence-${p.number}` ||
+        arrow.playerId === `${p.team}-${p.number}`
+      )
+      if (player) {
+        startPositionsRef.current[player.id] =
+          animatedPositionsRef.current[player.id] ??
+          { x: player.x, y: player.y }
+        groupTargets[player.id] = { x: arrow.toX, y: arrow.toY }
+      }
+    })
+
+    targetPositionsRef.current = groupTargets
+    animationStartTimeRef.current = performance.now()
+    animationDurationRef.current = 2000 / (animationSpeed ?? 1)
+
+    animationFrameRef.current = requestAnimationFrame((ts) =>
+      animateGroupTick(ts, () => {
+        currentGroupRef.current += 1
+        Object.assign(animatedPositionsRef.current, groupTargets)
+        clearGroupTimeout()
+        groupTimeoutRef.current = window.setTimeout(() => {
+          playNextGroup()
+        }, 300)
+      })
+    )
+  }, [players, animationSpeed, animateGroupTick, clearGroupTimeout])
 
   const handlePlay = useCallback(() => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
     }
+    clearGroupTimeout()
 
-    const starts: Record<string, { x: number; y: number }> = {}
-    const targets: Record<string, { x: number; y: number }> = {}
+    const arrowsWithMeta = arrows.map((arrow, index) => ({
+      ...arrow,
+      sequence: (arrow as SequencedArrow).sequence,
+      timestamp: (arrow as SequencedArrow).timestamp,
+      _index: index,
+    }))
 
-    players.forEach((player) => {
-      starts[player.id] = { x: player.x, y: player.y }
-      const playerArrow = arrows.find((a) =>
-        a.playerId === player.id ||
-        a.playerId === `attack-${player.number}` ||
-        a.playerId === `defense-${player.number}` ||
-        a.playerId === `defence-${player.number}` ||
-        a.playerId === `${player.team}-${player.number}`
-      )
-      if (playerArrow) {
-        targets[player.id] = { x: playerArrow.toX, y: playerArrow.toY }
-      }
+    const sortedByTime = [...arrowsWithMeta].sort((a, b) => {
+      const aTs = a.timestamp ?? Number.MAX_SAFE_INTEGER
+      const bTs = b.timestamp ?? Number.MAX_SAFE_INTEGER
+      if (aTs !== bTs) return aTs - bTs
+      return a._index - b._index
     })
 
+    let lastTimestamp: number | null = null
+    let generatedSequence = 0
+    const sequencedArrows = sortedByTime.map((arrow) => {
+      if (typeof arrow.sequence === "number") {
+        generatedSequence = Math.max(generatedSequence, arrow.sequence)
+        lastTimestamp = typeof arrow.timestamp === "number" ? arrow.timestamp : lastTimestamp
+        return arrow
+      }
+
+      if (typeof arrow.timestamp === "number") {
+        if (lastTimestamp === null || Math.abs(arrow.timestamp - lastTimestamp) >= 500) {
+          generatedSequence += 1
+        }
+        lastTimestamp = arrow.timestamp
+      } else {
+        generatedSequence += 1
+      }
+
+      return { ...arrow, sequence: generatedSequence }
+    })
+
+    const sortedArrows = [...sequencedArrows].sort((a, b) => {
+      const aSeq = a.sequence ?? Number.MAX_SAFE_INTEGER
+      const bSeq = b.sequence ?? Number.MAX_SAFE_INTEGER
+      if (aSeq !== bSeq) return aSeq - bSeq
+      const aTs = a.timestamp ?? Number.MAX_SAFE_INTEGER
+      const bTs = b.timestamp ?? Number.MAX_SAFE_INTEGER
+      if (aTs !== bTs) return aTs - bTs
+      return a._index - b._index
+    })
+
+    const grouped = sortedArrows.reduce<Record<number, SequencedArrow[]>>((acc, arrow) => {
+      const seq = arrow.sequence ?? 1
+      if (!acc[seq]) acc[seq] = []
+      acc[seq].push(arrow)
+      return acc
+    }, {})
+
+    animationGroupsRef.current = Object.keys(grouped)
+      .map((key) => Number(key))
+      .sort((a, b) => a - b)
+      .map((key) => grouped[key] ?? [])
+
+    currentGroupRef.current = 0
+    animatedPositionsRef.current = {}
+    setAnimatedPositions({})
+
     console.log("Play clicked - players:", players.length)
-    console.log("Targets found:", Object.keys(targets).length)
+    console.log("Targets found:", sortedArrows.length)
     console.log("Sample player id:", players[0]?.id)
     console.log("Sample arrow playerId:", arrows[0]?.playerId)
 
-    startPositionsRef.current = starts
-    targetPositionsRef.current = targets
-    animationStartTimeRef.current = performance.now()
-    animationDurationRef.current = 2000 / (animationSpeed ?? 1)
+    startPositionsRef.current = {}
+    players.forEach((p) => {
+      startPositionsRef.current[p.id] = { x: p.x, y: p.y }
+    })
+
     isAnimatingRef.current = true
-    animationFrameRef.current = requestAnimationFrame(animateTick)
-  }, [players, arrows, animationSpeed, animateTick])
+    playNextGroup()
+  }, [players, arrows, clearGroupTimeout, playNextGroup])
 
   const handlePause = useCallback(() => {
     isAnimatingRef.current = false
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
     }
-  }, [])
+    clearGroupTimeout()
+  }, [clearGroupTimeout])
 
   const handleReset = useCallback(() => {
     isAnimatingRef.current = false
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
     }
+    clearGroupTimeout()
     animatedPositionsRef.current = {}
     setAnimatedPositions({})
-  }, [])
+    currentGroupRef.current = 0
+    animationGroupsRef.current = []
+  }, [clearGroupTimeout])
 
   useEffect(() => {
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
+      }
+      if (groupTimeoutRef.current !== null) {
+        window.clearTimeout(groupTimeoutRef.current)
       }
     }
   }, [])
