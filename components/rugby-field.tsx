@@ -31,6 +31,7 @@ interface RugbyFieldProps {
   selectedArrowId: string | null
   mode: InteractionMode
   arrowType: ArrowType
+  passerSelected: string | null
   teamColors: TeamColors
   zoom: number
   clickToPlaceActive?: boolean
@@ -40,6 +41,8 @@ interface RugbyFieldProps {
   onPhaseDrop: (phase: number, x: number, y: number) => void
   onConeDrop: (x: number, y: number) => void
   onPlayerSelect: (playerId: string | null) => void
+  onPasserSelect: (playerId: string | null) => void
+  onCreatePassArrow: (passerId: string, receiverId: string) => void
   onBallSelect: (selected: boolean) => void
   onArrowSelect: (arrowId: string | null) => void
   onPlayerDragStart: (playerId: string) => void
@@ -86,6 +89,7 @@ export function RugbyField({
   selectedArrowId,
   mode,
   arrowType,
+  passerSelected,
   teamColors,
   zoom,
   clickToPlaceActive = false,
@@ -95,6 +99,8 @@ export function RugbyField({
   onPhaseDrop,
   onConeDrop,
   onPlayerSelect,
+  onPasserSelect,
+  onCreatePassArrow,
   onBallSelect,
   onArrowSelect,
   onPlayerDragStart,
@@ -174,6 +180,14 @@ export function RugbyField({
       return () => document.removeEventListener("click", handleClickOutside)
     }
   }, [contextMenu.visible, arrowEdit.showTypeDropdown])
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onPasserSelect(null)
+    }
+    window.addEventListener("keydown", handleEsc)
+    return () => window.removeEventListener("keydown", handleEsc)
+  }, [onPasserSelect])
 
   useEffect(() => {
     const getPointOnPath = (
@@ -460,15 +474,34 @@ export function RugbyField({
       onArrowSelect(null)
       return
     }
+
+    if (mode === "draw" && arrowType === "pass" && passerSelected) {
+      onPasserSelect(null)
+      return
+    }
     
     onFieldClick(x, y)
-  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate])
+  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect])
 
   const handlePlayerMouseDown = useCallback((e: React.MouseEvent, player: FieldPlayer) => {
     e.stopPropagation()
     if (e.button !== 0) return
     
     if (mode === "draw") {
+      if (arrowType === "pass") {
+        onBallSelect(false)
+        onArrowSelect(null)
+        if (!passerSelected) {
+          onPasserSelect(player.id)
+          return
+        }
+        if (passerSelected === player.id) {
+          onPasserSelect(null)
+          return
+        }
+        onCreatePassArrow(passerSelected, player.id)
+        return
+      }
       onBallSelect(false)
       onArrowSelect(null)
       onPlayerSelect(selectedPlayerId === player.id ? null : player.id)
@@ -512,7 +545,7 @@ export function RugbyField({
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow])
 
   const handleBallMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -870,12 +903,11 @@ export function RugbyField({
         break
       }
       case "pass": {
-        const passMidX = midX
-        const passMidY = midY
-        const perpX = -dy / dist * 4
-        const perpY = dx / dist * 4
-        const ctrlX = passMidX + perpX
-        const ctrlY = passMidY + perpY
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        const curveOffset = Math.min(distance * 0.15, 30)
+        const safeDistance = Math.max(distance, 0.001)
+        const ctrlX = midX - (dy / safeDistance) * curveOffset
+        const ctrlY = midY + (dx / safeDistance) * curveOffset
         pathElement = (
           <g key={arrow.id}>
             <defs>
@@ -1216,7 +1248,13 @@ export function RugbyField({
         {players.map((player) => (
           <g
             key={player.id}
-            className={`player-token ${mode === "move" ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+            className={`player-token ${
+              mode === "move"
+                ? "cursor-grab active:cursor-grabbing"
+                : mode === "draw" && arrowType === "pass" && passerSelected && passerSelected !== player.id
+                  ? "cursor-crosshair"
+                  : "cursor-pointer"
+            }`}
             transform={`translate(${player.x}, ${player.y})`}
             onMouseDown={(e) => handlePlayerMouseDown(e, player)}
             onContextMenu={(e) => handleContextMenu(e, player.id, "player")}
@@ -1229,6 +1267,9 @@ export function RugbyField({
               strokeWidth={selectedPlayerId === player.id ? "0.3" : "0.1"}
               className="transition-all"
             />
+            {mode === "draw" && arrowType === "pass" && passerSelected === player.id && (
+              <circle r="2.2" fill="none" stroke="#EAB308" strokeWidth="0.25" className="animate-pulse" />
+            )}
             <text
               y="0.1"
               fontSize="1"
@@ -1405,6 +1446,11 @@ export function RugbyField({
       )}
       
       {/* Instructions overlay */}
+      {mode === "draw" && arrowType === "pass" && passerSelected && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-md text-sm text-foreground border border-border">
+          Now click the receiver
+        </div>
+      )}
       {mode === "draw" && (selectedPlayerId || selectedBall) && (
         <div className="absolute bottom-4 left-4 bg-card/90 backdrop-blur-sm px-3 py-2 rounded-md text-sm text-foreground border border-border">
           Click on the field to draw {arrowType} arrow

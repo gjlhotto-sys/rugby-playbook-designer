@@ -25,6 +25,7 @@ export function PlaybookDesigner() {
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
   const [mode, setMode] = useState<InteractionMode>("move")
   const [arrowType, setArrowType] = useState<ArrowType>("run")
+  const [passerSelected, setPasserSelected] = useState<string | null>(null)
   const [selectedPlacementToken, setSelectedPlacementToken] = useState<SidebarPlacementToken | null>(null)
   const [playName, setPlayName] = useState("")
   const [playType, setPlayType] = useState<PlayType>("Free Play")
@@ -798,7 +799,28 @@ export function PlaybookDesigner() {
     setSelectedPlayerId(null)
     setSelectedBall(false)
     setSelectedArrowId(null)
+    setPasserSelected(null)
   }, [])
+
+  const handleCreatePassArrow = useCallback((passerId: string, receiverId: string) => {
+    const passer = fieldPlayers.find((p) => p.id === passerId)
+    const receiver = fieldPlayers.find((p) => p.id === receiverId)
+    if (!passer || !receiver || passer.id === receiver.id) return
+
+    const newArrow: Arrow = {
+      id: `arrow-${Date.now()}`,
+      playerId: passer.id,
+      team: passer.team,
+      fromX: passer.x,
+      fromY: passer.y,
+      toX: receiver.x,
+      toY: receiver.y,
+      arrowType: "pass",
+    }
+    setArrows((prev) => [...prev, newArrow])
+    setUndoStack((prev) => [...prev, { type: "add_arrow", arrow: newArrow }])
+    setPasserSelected(null)
+  }, [fieldPlayers])
 
   const handlePlayAnimation = useCallback(() => {
     if (arrows.length === 0) return
@@ -1066,6 +1088,7 @@ export function PlaybookDesigner() {
             selectedArrowId={selectedArrowId}
             mode={mode}
             arrowType={arrowType}
+            passerSelected={passerSelected}
             teamColors={teamColors}
             zoom={100}
             clickToPlaceActive={selectedPlacementToken !== null}
@@ -1075,6 +1098,8 @@ export function PlaybookDesigner() {
             onPhaseDrop={handlePhaseDrop}
             onConeDrop={handleConeDrop}
             onPlayerSelect={handlePlayerSelect}
+            onPasserSelect={setPasserSelected}
+            onCreatePassArrow={handleCreatePassArrow}
             onBallSelect={handleBallSelect}
             onArrowSelect={handleArrowSelect}
             onPlayerDragStart={handlePlayerDragStart}
