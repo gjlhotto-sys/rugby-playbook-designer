@@ -1056,47 +1056,21 @@ export function PlaybookDesigner() {
           </button>
 
           {arrows.length > 0 && (
-            <>
-              {!isAnimating ? (
+            <div className="flex rounded-md overflow-hidden border border-border">
+              {[0.5, 1, 2].map((speed) => (
                 <button
-                  onClick={handlePlayAnimation}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-emerald-600/80 text-white hover:bg-emerald-600 transition-colors"
-                  title={hasCompletedAnimation ? "Replay animation" : "Play animation"}
+                  key={speed}
+                  onClick={() => setAnimationSpeed(speed as 0.5 | 1 | 2)}
+                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                    animationSpeed === speed
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                  }`}
                 >
-                  {hasCompletedAnimation ? "▶ Replay" : "▶ Play"}
+                  {speed}x
                 </button>
-              ) : (
-                <button
-                  onClick={handlePauseAnimation}
-                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-amber-500/90 text-black hover:bg-amber-500 transition-colors"
-                  title="Pause animation"
-                >
-                  ⏸ Pause
-                </button>
-              )}
-              <button
-                onClick={handleResetAnimation}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/70 text-foreground hover:bg-muted transition-colors"
-                title="Reset to animation start"
-              >
-                ⏹ Reset
-              </button>
-              <div className="flex rounded-md overflow-hidden border border-border">
-                {[0.5, 1, 2].map((speed) => (
-                  <button
-                    key={speed}
-                    onClick={() => setAnimationSpeed(speed as 0.5 | 1 | 2)}
-                    className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                      animationSpeed === speed
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {speed}x
-                  </button>
-                ))}
-              </div>
-            </>
+              ))}
+            </div>
           )}
 
           {playName && (
@@ -1230,10 +1204,7 @@ export function PlaybookDesigner() {
             onArrowDelete={handleArrowDelete}
             onArrowTypeChange={handleArrowTypeChange}
             onTextLabelCreate={handleTextLabelCreate}
-            isAnimating={isAnimating}
-            isPaused={isPaused}
             animationSpeed={animationSpeed}
-            onAnimationComplete={handleAnimationComplete}
             />
           </div>
           {isPresentationMode && (

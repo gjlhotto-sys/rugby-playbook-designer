@@ -71,10 +71,7 @@ interface RugbyFieldProps {
   onArrowDelete: (arrowId: string) => void
   onArrowTypeChange: (arrowId: string, newType: ArrowType) => void
   onTextLabelCreate: (x: number, y: number) => void
-  isAnimating?: boolean
-  isPaused?: boolean
   animationSpeed?: 0.5 | 1 | 2
-  onAnimationComplete?: () => void
 }
 
 export function RugbyField({
@@ -129,10 +126,7 @@ export function RugbyField({
   onArrowDelete,
   onArrowTypeChange,
   onTextLabelCreate,
-  isAnimating = false,
-  isPaused = false,
   animationSpeed = 1,
-  onAnimationComplete,
 }: RugbyFieldProps) {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -150,19 +144,14 @@ export function RugbyField({
     dropdownX: 0,
     dropdownY: 0,
   })
-  const [trailPositions, setTrailPositions] = useState<Record<string, Array<{ x: number; y: number }>>>({})
-  const trailRef = useRef<Record<string, Array<{ x: number; y: number }>>>({})
-  const [decoyActivePlayers, setDecoyActivePlayers] = useState<Record<string, boolean>>({})
-  const rafRef = useRef<number | null>(null)
-  const animationRef = useRef<{
-    rafId: number | null
-    startTime: number
-    pausedElapsed: number
-    durationPerSegment: number
-    playerTracks: Record<string, Array<{ fromX: number; fromY: number; toX: number; toY: number; arrowType: ArrowType }>>
-    ballTrack: Array<{ fromX: number; fromY: number; toX: number; toY: number }>
-    completed: boolean
-  } | null>(null)
+  const animatedPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const [animatedPositions, setAnimatedPositions] = useState<Record<string, { x: number; y: number }>>({})
+  const startPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const targetPositionsRef = useRef<Record<string, { x: number; y: number }>>({})
+  const animationStartTimeRef = useRef<number>(0)
+  const animationFrameRef = useRef<number>(0)
+  const isAnimatingRef = useRef(false)
+  const animationDurationRef = useRef(2000)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -189,230 +178,92 @@ export function RugbyField({
     return () => window.removeEventListener("keydown", handleEsc)
   }, [onPasserSelect])
 
-  useEffect(() => {
-    const getPointOnPath = (
-      segments: Array<{ fromX: number; fromY: number; toX: number; toY: number; arrowType: ArrowType }> | undefined,
-      index: number,
-      t: number
-    ) => {
-      if (!segments || segments.length === 0) return { x: 0, y: 0 }
-      const segment = segments[Math.min(index, segments.length - 1)]
-      if (!segment) return { x: 0, y: 0 }
-      const { fromX, fromY, toX, toY, arrowType } = segment
-      const dx = toX - fromX
-      const dy = toY - fromY
-      const dist = Math.max(0.001, Math.sqrt(dx * dx + dy * dy))
+  const animateTick = useCallback((timestamp: number) => {
+    if (!isAnimatingRef.current) return
 
-      if (arrowType === "curve") {
-        const midX = (fromX + toX) / 2
-        const midY = (fromY + toY) / 2
-        const perpX = (-dy / dist) * 6
-        const perpY = (dx / dist) * 6
-        const ctrlX = midX + perpX
-        const ctrlY = midY + perpY
-        const oneMinusT = 1 - t
-        return {
-          x: oneMinusT * oneMinusT * fromX + 2 * oneMinusT * t * ctrlX + t * t * toX,
-          y: oneMinusT * oneMinusT * fromY + 2 * oneMinusT * t * ctrlY + t * t * toY,
+    const elapsed = timestamp - animationStartTimeRef.current
+    const duration = animationDurationRef.current
+    const rawProgress = Math.min(elapsed / duration, 1)
+    const progress = 1 - Math.pow(1 - rawProgress, 3)
+
+    const newPositions: Record<string, { x: number; y: number }> = {}
+    Object.keys(targetPositionsRef.current).forEach((id) => {
+      const start = startPositionsRef.current[id]
+      const target = targetPositionsRef.current[id]
+      if (start && target) {
+        newPositions[id] = {
+          x: start.x + (target.x - start.x) * progress,
+          y: start.y + (target.y - start.y) * progress,
         }
       }
+    })
 
-      if (arrowType === "z-left" || arrowType === "z-right") {
-        const zMidX = fromX + dx * 0.5 + (arrowType === "z-left" ? -3 : 3)
-        const zMidY = fromY + dy * 0.5
-        if (t < 0.5) {
-          const t2 = t * 2
-          return {
-            x: fromX + (zMidX - fromX) * t2,
-            y: fromY + (zMidY - fromY) * t2,
-          }
-        }
-        const t2 = (t - 0.5) * 2
-        return {
-          x: zMidX + (toX - zMidX) * t2,
-          y: zMidY + (toY - zMidY) * t2,
-        }
-      }
+    animatedPositionsRef.current = newPositions
+    setAnimatedPositions(newPositions)
 
-      if (arrowType === "loop") {
-        const midX = (fromX + toX) / 2
-        const midY = (fromY + toY) / 2
-        const perpX = -dy / dist
-        const perpY = dx / dist
-        const radius = Math.min(dist * 0.35, 5)
-        return {
-          x: fromX + dx * t + Math.sin(t * Math.PI) * perpX * radius,
-          y: fromY + dy * t + Math.sin(t * Math.PI) * perpY * radius,
-        }
-      }
-
-      return {
-        x: fromX + dx * t,
-        y: fromY + dy * t,
-      }
-    }
-
-    const buildTracks = () => {
-      const playerTracks: Record<string, Array<{ fromX: number; fromY: number; toX: number; toY: number; arrowType: ArrowType }>> = {}
-      const playerById = new Map(players.map((p) => [p.id, p]))
-
-      players.forEach((player) => {
-        const segments = arrows
-          .filter((a) => a.playerId === player.id && a.arrowType !== "pass")
-          .map((a, idx, arr) => {
-            if (idx === 0) {
-              return { fromX: player.x, fromY: player.y, toX: a.toX, toY: a.toY, arrowType: a.arrowType }
-            }
-            const prev = arr[idx - 1]
-            return { fromX: prev.toX, fromY: prev.toY, toX: a.toX, toY: a.toY, arrowType: a.arrowType }
-          })
-        if (segments.length > 0) playerTracks[player.id] = segments
-      })
-
-      const ballTrack = ball
-        ? arrows
-            .filter((a) => a.arrowType === "pass" && (a.playerId === "ball" || playerById.has(a.playerId)))
-            .map((a, idx, arr) => {
-              if (idx === 0) return { fromX: ball.x, fromY: ball.y, toX: a.toX, toY: a.toY }
-              const prev = arr[idx - 1]
-              return { fromX: prev.toX, fromY: prev.toY, toX: a.toX, toY: a.toY }
-            })
-        : []
-
-      return { playerTracks, ballTrack }
-    }
-
-    const cancelFrame = () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
-      }
-      const currentAnimation = animationRef.current
-      if (currentAnimation && currentAnimation.rafId !== null) {
-        currentAnimation.rafId = null
-      }
-    }
-
-    if (!isAnimating || isPaused) {
-      cancelFrame()
-      const currentAnimation = animationRef.current
-      if (currentAnimation && isPaused) {
-        currentAnimation.pausedElapsed = performance.now() - currentAnimation.startTime
-      }
-      return
-    }
-
-    if (!animationRef.current || animationRef.current.completed) {
-      const { playerTracks, ballTrack } = buildTracks()
-      animationRef.current = {
-        rafId: null,
-        startTime: performance.now(),
-        pausedElapsed: 0,
-        durationPerSegment: 2000 / animationSpeed,
-        playerTracks,
-        ballTrack,
-        completed: false,
-      }
-      setTrailPositions({})
-      trailRef.current = {}
-      setDecoyActivePlayers({})
+    if (rawProgress < 1) {
+      animationFrameRef.current = requestAnimationFrame(animateTick)
     } else {
-      animationRef.current.durationPerSegment = 2000 / animationSpeed
-      animationRef.current.startTime = performance.now() - animationRef.current.pausedElapsed
+      isAnimatingRef.current = false
+      console.log("Animation complete")
+    }
+  }, [])
+
+  const handlePlay = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
     }
 
-    const tick = (now: number) => {
-      if (!animationRef.current) return
-      const animation = animationRef.current
-      const elapsed = now - animation.startTime
-      let completeCount = 0
-      const activeDecoys: Record<string, boolean> = {}
-      const nextTrail: Record<string, Array<{ x: number; y: number }>> = {}
-      const animationState = Object.entries(animation.playerTracks)
-      if (animationState.length === 0 && animation.ballTrack.length === 0) {
-        animation.completed = true
-        setDecoyActivePlayers({})
-        onAnimationComplete?.()
-        return
+    const starts: Record<string, { x: number; y: number }> = {}
+    const targets: Record<string, { x: number; y: number }> = {}
+
+    players.forEach((player) => {
+      starts[player.id] = { x: player.x, y: player.y }
+      const playerArrow = arrows.find((a) =>
+        a.playerId === player.id ||
+        a.playerId === `attack-${player.number}` ||
+        a.playerId === `defense-${player.number}` ||
+        a.playerId === `defence-${player.number}` ||
+        a.playerId === `${player.team}-${player.number}`
+      )
+      if (playerArrow) {
+        targets[player.id] = { x: playerArrow.toX, y: playerArrow.toY }
       }
+    })
 
-      animationState.forEach(([playerId, segments]) => {
-        if (!segments || segments.length === 0) {
-          completeCount += 1
-          return
-        }
-        const totalDuration = segments.length * animation.durationPerSegment
-        const clampedElapsed = Math.min(elapsed, totalDuration)
-        const rawSegIndex = Math.floor(clampedElapsed / animation.durationPerSegment)
-        if (rawSegIndex >= segments.length) {
-          completeCount += 1
-          return
-        }
-        const segIndex = Math.min(segments.length - 1, rawSegIndex)
-        const segStart = segIndex * animation.durationPerSegment
-        const localT = Math.min(1, (clampedElapsed - segStart) / animation.durationPerSegment)
-        const segment = segments[segIndex]
-        if (!segment) {
-          completeCount += 1
-          return
-        }
-        const point = getPointOnPath(segments, segIndex, localT)
+    console.log("Play clicked - players:", players.length)
+    console.log("Targets found:", Object.keys(targets).length)
+    console.log("Sample player id:", players[0]?.id)
+    console.log("Sample arrow playerId:", arrows[0]?.playerId)
 
-        onPlayerDrag(playerId, point.x, point.y)
+    startPositionsRef.current = starts
+    targetPositionsRef.current = targets
+    animationStartTimeRef.current = performance.now()
+    animationDurationRef.current = 2000 / (animationSpeed ?? 1)
+    isAnimatingRef.current = true
+    animationFrameRef.current = requestAnimationFrame(animateTick)
+  }, [players, arrows, animationSpeed, animateTick])
 
-        const existingTrail = trailRef.current[playerId] || []
-        nextTrail[playerId] = [...existingTrail, { x: point.x, y: point.y }].slice(-6)
-        if (segment.arrowType === "decoy") activeDecoys[playerId] = true
-
-        if (elapsed >= totalDuration) completeCount += 1
-      })
-
-      if (animation.ballTrack.length > 0) {
-        const totalDuration = animation.ballTrack.length * animation.durationPerSegment
-        const clampedElapsed = Math.min(elapsed, totalDuration)
-        const rawSegIndex = Math.floor(clampedElapsed / animation.durationPerSegment)
-        if (rawSegIndex >= animation.ballTrack.length) {
-          completeCount += 1
-        } else {
-          const segIndex = Math.min(animation.ballTrack.length - 1, rawSegIndex)
-        const segStart = segIndex * animation.durationPerSegment
-        const localT = Math.min(1, (clampedElapsed - segStart) / animation.durationPerSegment)
-        const seg = animation.ballTrack[segIndex]
-          if (seg) {
-            onBallDrag(seg.fromX + (seg.toX - seg.fromX) * localT, seg.fromY + (seg.toY - seg.fromY) * localT)
-          }
-        if (elapsed >= totalDuration) completeCount += 1
-        }
-      }
-
-      setTrailPositions(nextTrail)
-      trailRef.current = nextTrail
-      setDecoyActivePlayers(activeDecoys)
-
-      const expectedComplete = Object.keys(animation.playerTracks).length + (animation.ballTrack.length > 0 ? 1 : 0)
-      if (expectedComplete === 0 || completeCount >= expectedComplete) {
-        animation.completed = true
-        animation.rafId = null
-        setDecoyActivePlayers({})
-        onAnimationComplete?.()
-        return
-      }
-
-      animation.rafId = requestAnimationFrame(tick)
-      rafRef.current = animation.rafId
+  const handlePause = useCallback(() => {
+    isAnimatingRef.current = false
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
     }
+  }, [])
 
-    animationRef.current.rafId = requestAnimationFrame(tick)
-    rafRef.current = animationRef.current.rafId
-
-    return () => cancelFrame()
-  }, [isAnimating, isPaused, animationSpeed, arrows, players, ball, onPlayerDrag, onBallDrag, onAnimationComplete])
+  const handleReset = useCallback(() => {
+    isAnimatingRef.current = false
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+    }
+    animatedPositionsRef.current = {}
+    setAnimatedPositions({})
+  }, [])
 
   useEffect(() => {
     return () => {
-      if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
       }
     }
   }, [])
@@ -1071,6 +922,19 @@ export function RugbyField({
         clickToPlaceActive ? "ring-2 ring-primary/60 rounded-md animate-pulse" : ""
       }`}
     >
+      {arrows.length > 0 && (
+        <div className="absolute top-2 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-md border border-border bg-card/90 px-2 py-1">
+          <button onClick={handlePlay} className="px-2 py-1 text-[10px] rounded border border-border bg-emerald-600/80 text-white">
+            ▶ Play
+          </button>
+          <button onClick={handlePause} className="px-2 py-1 text-[10px] rounded border border-border bg-amber-500/90 text-black">
+            ⏸ Pause
+          </button>
+          <button onClick={handleReset} className="px-2 py-1 text-[10px] rounded border border-border bg-muted/70 text-foreground">
+            ⏹ Reset
+          </button>
+        </div>
+      )}
       <svg
         ref={svgRef}
         viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
@@ -1230,22 +1094,10 @@ export function RugbyField({
           </g>
         )}
 
-        {/* Player motion trails during animation */}
-        {Object.entries(trailPositions).map(([playerId, points]) =>
-          points.map((pt, index) => (
-            <circle
-              key={`${playerId}-trail-${index}`}
-              cx={pt.x}
-              cy={pt.y}
-              r="0.9"
-              fill="rgba(255,255,255,0.35)"
-              opacity={(index + 1) / (points.length + 1)}
-            />
-          ))
-        )}
-
         {/* Player tokens - 16px = ~1.6 units at this scale */}
-        {players.map((player) => (
+        {players.map((player) => {
+          const renderPos = animatedPositions[player.id] ?? { x: player.x, y: player.y }
+          return (
           <g
             key={player.id}
             className={`player-token ${
@@ -1255,10 +1107,9 @@ export function RugbyField({
                   ? "cursor-crosshair"
                   : "cursor-pointer"
             }`}
-            transform={`translate(${player.x}, ${player.y})`}
+            transform={`translate(${renderPos.x}, ${renderPos.y})`}
             onMouseDown={(e) => handlePlayerMouseDown(e, player)}
             onContextMenu={(e) => handleContextMenu(e, player.id, "player")}
-            opacity={decoyActivePlayers[player.id] ? 0.6 : 1}
           >
             <circle
               r="1.6"
@@ -1291,7 +1142,8 @@ export function RugbyField({
               {player.abbr}
             </text>
           </g>
-        ))}
+          )
+        })}
 
         {/* Phase markers */}
         {phases.map((phase) => (
