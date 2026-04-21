@@ -41,6 +41,9 @@ export function PlaybookDesigner() {
   const [isPaused, setIsPaused] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState<0.5 | 1 | 2>(1)
   const [hasCompletedAnimation, setHasCompletedAnimation] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [panX, setPanX] = useState(0)
+  const [panY, setPanY] = useState(0)
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
@@ -49,6 +52,9 @@ export function PlaybookDesigner() {
   
   // Track drag start state for undo
   const dragStartRef = useRef<{ type: "player" | "ball" | "phase"; id: string; x: number; y: number; arrows: Arrow[] } | null>(null)
+  const fieldContainerRef = useRef<HTMLDivElement>(null)
+  const isPanning = useRef(false)
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
 
   // Load saved plays from localStorage on mount
   useEffect(() => {
@@ -104,6 +110,39 @@ export function PlaybookDesigner() {
     document.addEventListener("fullscreenchange", handleFullscreenChange)
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange)
   }, [])
+
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        setZoom((prev) => e.deltaY < 0
+          ? Math.min(prev + 0.1, 2.0)
+          : Math.max(prev - 0.1, 0.5))
+        return
+      }
+
+      if (zoom > 1 && fieldContainerRef.current?.contains(e.target as Node)) {
+        e.preventDefault()
+        const rect = fieldContainerRef.current.getBoundingClientRect()
+        const maxPanX = ((zoom - 1) * rect.width) / 2
+        const maxPanY = ((zoom - 1) * rect.height) / 2
+        if (e.shiftKey) {
+          setPanX((prev) => Math.max(-maxPanX, Math.min(maxPanX, prev - e.deltaY * 0.25)))
+        } else {
+          setPanY((prev) => Math.max(-maxPanY, Math.min(maxPanY, prev - e.deltaY * 0.25)))
+        }
+      }
+    }
+    window.addEventListener("wheel", handleWheel, { passive: false })
+    return () => window.removeEventListener("wheel", handleWheel)
+  }, [zoom])
+
+  useEffect(() => {
+    if (zoom === 1) {
+      setPanX(0)
+      setPanY(0)
+    }
+  }, [zoom])
 
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
@@ -1071,12 +1110,75 @@ export function PlaybookDesigner() {
           >
             ⛶ Present
           </button>
+          <button
+            onClick={() => setZoom((prev) => Math.max(prev - 0.1, 0.5))}
+            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
+          >
+            -
+          </button>
+          <button
+            onClick={() => setZoom((prev) => Math.min(prev + 0.1, 2.0))}
+            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
+          >
+            +
+          </button>
+          <span className="text-[10px] text-muted-foreground">{Math.round(zoom * 100)}%</span>
+          <button
+            onClick={() => {
+              setZoom(1)
+              setPanX(0)
+              setPanY(0)
+            }}
+            className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            Reset
+          </button>
+          {zoom > 1 && (
+            <span className="text-[10px] text-muted-foreground">Alt+drag to pan</span>
+          )}
         </div>
         )}
 
         {/* Field container - fills remaining space */}
-        <div className="relative flex-1 p-2 min-h-0">
-          <RugbyField
+        <div
+          ref={fieldContainerRef}
+          className="relative flex-1 p-2 min-h-0"
+          onMouseDown={(e) => {
+            if (zoom <= 1) return
+            if (e.altKey || e.button === 1) {
+              e.preventDefault()
+              isPanning.current = true
+              panStart.current = { x: e.clientX, y: e.clientY, panX, panY }
+            }
+          }}
+          onMouseMove={(e) => {
+            if (!isPanning.current || !fieldContainerRef.current) return
+            const dx = e.clientX - panStart.current.x
+            const dy = e.clientY - panStart.current.y
+            const rect = fieldContainerRef.current.getBoundingClientRect()
+            const maxPanX = ((zoom - 1) * rect.width) / 2
+            const maxPanY = ((zoom - 1) * rect.height) / 2
+            setPanX(Math.max(-maxPanX, Math.min(maxPanX, panStart.current.panX + dx / zoom)))
+            setPanY(Math.max(-maxPanY, Math.min(maxPanY, panStart.current.panY + dy / zoom)))
+          }}
+          onMouseUp={() => {
+            isPanning.current = false
+          }}
+          onMouseLeave={() => {
+            isPanning.current = false
+          }}
+        >
+          <div
+            style={{
+              transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
+              transformOrigin: "top center",
+              transition: isPanning.current ? "none" : "transform 0.15s ease",
+              width: "100%",
+              height: "100%",
+              cursor: zoom > 1 ? "grab" : "default",
+            }}
+          >
+            <RugbyField
             players={fieldPlayers}
             arrows={arrows}
             ball={ball}
@@ -1132,7 +1234,8 @@ export function PlaybookDesigner() {
             isPaused={isPaused}
             animationSpeed={animationSpeed}
             onAnimationComplete={handleAnimationComplete}
-          />
+            />
+          </div>
           {isPresentationMode && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-md border border-border bg-card/90 px-3 py-2">
               <span className="text-[11px] text-foreground max-w-[200px] truncate">
