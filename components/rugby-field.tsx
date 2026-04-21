@@ -1422,34 +1422,6 @@ export function RugbyField({
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
-        {mode === "draw" && arrowType === "pass" && passerSelected &&
-          arrows
-            .filter((a) => a.arrowType !== "pass")
-            .map((arrow) => (
-              <g key={`endpoint-${arrow.id}`}>
-                <circle
-                  cx={arrow.toX}
-                  cy={arrow.toY}
-                  r="4.5"
-                  fill="transparent"
-                  style={{ cursor: "crosshair" }}
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    tryCreatePassToPoint(arrow.toX, arrow.toY)
-                  }}
-                />
-                <circle
-                  cx={arrow.toX}
-                  cy={arrow.toY}
-                  r="1.4"
-                  fill="rgba(234, 179, 8, 0.4)"
-                  stroke="#EAB308"
-                  strokeWidth="0.35"
-                  style={{ cursor: "crosshair", pointerEvents: "none" }}
-                />
-              </g>
-            ))}
         {mode === "draw" && arrowType === "pass" && hoverPassEndpoint && (
           <g className="pointer-events-none" transform={`translate(${hoverPassEndpoint.x}, ${hoverPassEndpoint.y})`}>
             <circle r="2.1" fill="none" stroke="#EAB308" strokeWidth="0.2" strokeDasharray="0.6,0.4" opacity="0.9" />
@@ -1581,6 +1553,33 @@ export function RugbyField({
           </g>
           )
         })}
+        {mode === "draw" && arrowType === "pass" && passerSelected &&
+          arrows
+            .filter((a) => a.arrowType !== "pass")
+            .map((arrow) => (
+              <g key={`endpoint-${arrow.id}`}>
+                <circle
+                  cx={arrow.toX}
+                  cy={arrow.toY}
+                  r="4.5"
+                  fill="transparent"
+                  style={{ cursor: "crosshair" }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    tryCreatePassToPoint(arrow.toX, arrow.toY)
+                  }}
+                />
+                <circle
+                  cx={arrow.toX}
+                  cy={arrow.toY}
+                  r="1.4"
+                  fill="rgba(234, 179, 8, 0.4)"
+                  stroke="#EAB308"
+                  strokeWidth="0.35"
+                  style={{ cursor: "crosshair", pointerEvents: "none" }}
+                />
+              </g>
+            ))}
 
         {/* Phase markers */}
         {phases.map((phase) => (
