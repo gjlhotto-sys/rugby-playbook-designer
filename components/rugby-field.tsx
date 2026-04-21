@@ -156,6 +156,9 @@ export function RugbyField({
   const currentGroupRef = useRef(0)
   const animationGroupsRef = useRef<SequencedArrow[][]>([])
   const groupTimeoutRef = useRef<number | null>(null)
+  const nextGroupStarted = useRef(false)
+  const overlapAnimationFrameRef = useRef<number | null>(null)
+  const overlappedGroupIndexRef = useRef<number | null>(null)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -182,18 +185,38 @@ export function RugbyField({
     return () => window.removeEventListener("keydown", handleEsc)
   }, [onPasserSelect])
 
-  const animateGroupTick = useCallback((timestamp: number, onComplete: () => void) => {
+  const getPlayerCurrentPos = useCallback((playerId: string) => {
+    if (animatedPositionsRef.current[playerId]) {
+      return animatedPositionsRef.current[playerId]
+    }
+    const player = players.find((p) =>
+      p.id === playerId ||
+      `attack-${p.number}` === playerId ||
+      `defense-${p.number}` === playerId ||
+      `defence-${p.number}` === playerId ||
+      `${p.team}-${p.number}` === playerId
+    )
+    return player ? { x: player.x, y: player.y } : null
+  }, [players])
+
+  const animateGroupTick = useCallback((
+    timestamp: number,
+    groupStarts: Record<string, { x: number; y: number }>,
+    groupTargets: Record<string, { x: number; y: number }>,
+    groupStartTime: number,
+    onComplete: () => void,
+    onProgress?: (rawProgress: number) => void
+  ) => {
     if (!isAnimatingRef.current) return
 
-    const elapsed = timestamp - animationStartTimeRef.current
+    const elapsed = timestamp - groupStartTime
     const duration = animationDurationRef.current
     const rawProgress = Math.min(elapsed / duration, 1)
     const progress = 1 - Math.pow(1 - rawProgress, 3)
-
-    const newPositions: Record<string, { x: number; y: number }> = {}
-    Object.keys(targetPositionsRef.current).forEach((id) => {
-      const start = startPositionsRef.current[id]
-      const target = targetPositionsRef.current[id]
+    const newPositions: Record<string, { x: number; y: number }> = { ...animatedPositionsRef.current }
+    Object.keys(groupTargets).forEach((id) => {
+      const start = groupStarts[id]
+      const target = groupTargets[id]
       if (start && target) {
         newPositions[id] = {
           x: start.x + (target.x - start.x) * progress,
@@ -203,10 +226,13 @@ export function RugbyField({
     })
 
     animatedPositionsRef.current = newPositions
-    setAnimatedPositions(newPositions)
+    setAnimatedPositions({ ...newPositions })
+    onProgress?.(rawProgress)
 
     if (rawProgress < 1) {
-      animationFrameRef.current = requestAnimationFrame((ts) => animateGroupTick(ts, onComplete))
+      animationFrameRef.current = requestAnimationFrame((ts) =>
+        animateGroupTick(ts, groupStarts, groupTargets, groupStartTime, onComplete, onProgress)
+      )
     } else {
       onComplete()
     }
@@ -219,21 +245,12 @@ export function RugbyField({
     }
   }, [])
 
-  const playNextGroup = useCallback(() => {
-    const groups = animationGroupsRef.current
-    const groupIndex = currentGroupRef.current
-
-    if (groupIndex >= groups.length) {
-      isAnimatingRef.current = false
-      console.log("Animation complete")
-      return
-    }
-
-    const currentGroup = groups[groupIndex]
-    const groupTargets: Record<string, { x: number; y: number }> = {}
+  const buildGroupMotion = useCallback((group: SequencedArrow[]) => {
+    const starts: Record<string, { x: number; y: number }> = {}
+    const targets: Record<string, { x: number; y: number }> = {}
     let hasPassInGroup = false
 
-    currentGroup.forEach((arrow) => {
+    group.forEach((arrow) => {
       const player = players.find((p) =>
         arrow.playerId === p.id ||
         arrow.playerId === `attack-${p.number}` ||
@@ -255,45 +272,121 @@ export function RugbyField({
             })
           : null
 
-        startPositionsRef.current.ball = animatedPositionsRef.current.ball ?? {
-          x: player?.x ?? arrow.fromX,
-          y: player?.y ?? arrow.fromY,
-        }
-        groupTargets.ball = {
-          x: receiver?.x ?? arrow.toX,
-          y: receiver?.y ?? arrow.toY,
-        }
+        const passerPos = player ? getPlayerCurrentPos(player.id) : null
+        starts.ball = animatedPositionsRef.current.ball ?? passerPos ?? { x: arrow.fromX, y: arrow.fromY }
+        targets.ball = { x: receiver?.x ?? arrow.toX, y: receiver?.y ?? arrow.toY }
         return
       }
 
       if (player) {
-        startPositionsRef.current[player.id] = animatedPositionsRef.current[player.id] ?? { x: player.x, y: player.y }
-        groupTargets[player.id] = { x: arrow.toX, y: arrow.toY }
+        const playerStart = getPlayerCurrentPos(player.id)
+        if (playerStart) {
+          starts[player.id] = playerStart
+          targets[player.id] = { x: arrow.toX, y: arrow.toY }
+        }
       }
     })
 
+    return { starts, targets, hasPassInGroup }
+  }, [players, getPlayerCurrentPos])
+
+  const prepareNextGroup = useCallback((group: SequencedArrow[], groupIndex: number) => {
+    const { starts, targets, hasPassInGroup } = buildGroupMotion(group)
+    const groupStartTime = performance.now()
+    overlappedGroupIndexRef.current = groupIndex
+
+    const parallelTick = (timestamp: number) => {
+      if (!isAnimatingRef.current) return
+      const elapsed = timestamp - groupStartTime
+      const duration = animationDurationRef.current
+      const rawProgress = Math.min(elapsed / duration, 1)
+      const progress = 1 - Math.pow(1 - rawProgress, 3)
+      const newPositions: Record<string, { x: number; y: number }> = { ...animatedPositionsRef.current }
+
+      Object.keys(targets).forEach((id) => {
+        const start = starts[id]
+        const target = targets[id]
+        if (start && target) {
+          newPositions[id] = {
+            x: start.x + (target.x - start.x) * progress,
+            y: start.y + (target.y - start.y) * progress,
+          }
+        }
+      })
+
+      animatedPositionsRef.current = newPositions
+      setAnimatedPositions({ ...newPositions })
+
+      if (rawProgress < 1) {
+        overlapAnimationFrameRef.current = requestAnimationFrame(parallelTick)
+      } else {
+        Object.keys(targets).forEach((id) => {
+          animatedPositionsRef.current[id] = targets[id]
+        })
+        if (hasPassInGroup && targets.ball) {
+          if (ball) onBallDrag(targets.ball.x, targets.ball.y)
+          delete animatedPositionsRef.current.ball
+        }
+        setAnimatedPositions({ ...animatedPositionsRef.current })
+      }
+    }
+
+    overlapAnimationFrameRef.current = requestAnimationFrame(parallelTick)
+  }, [buildGroupMotion, ball, onBallDrag])
+
+  const playNextGroup = useCallback(() => {
+    const groups = animationGroupsRef.current
+    const groupIndex = currentGroupRef.current
+
+    if (groupIndex >= groups.length) {
+      isAnimatingRef.current = false
+      console.log("Animation complete")
+      return
+    }
+
+    nextGroupStarted.current = false
+    const currentGroup = groups[groupIndex]
+    const { starts: groupStarts, targets: groupTargets, hasPassInGroup } = buildGroupMotion(currentGroup)
+    startPositionsRef.current = { ...startPositionsRef.current, ...groupStarts }
     targetPositionsRef.current = groupTargets
     animationStartTimeRef.current = performance.now()
     animationDurationRef.current = 2000 / (animationSpeed ?? 1)
 
     animationFrameRef.current = requestAnimationFrame((ts) =>
-      animateGroupTick(ts, () => {
-        currentGroupRef.current += 1
-        Object.assign(animatedPositionsRef.current, groupTargets)
+      animateGroupTick(ts, groupStarts, groupTargets, animationStartTimeRef.current, () => {
+        Object.keys(targetPositionsRef.current).forEach((id) => {
+          animatedPositionsRef.current[id] = targetPositionsRef.current[id]
+        })
         if (hasPassInGroup && groupTargets.ball) {
           if (ball) {
             onBallDrag(groupTargets.ball.x, groupTargets.ball.y)
           }
           delete animatedPositionsRef.current.ball
-          setAnimatedPositions({ ...animatedPositionsRef.current })
+        }
+        setAnimatedPositions({ ...animatedPositionsRef.current })
+        currentGroupRef.current += 1
+        if (overlappedGroupIndexRef.current === currentGroupRef.current) {
+          currentGroupRef.current += 1
         }
         clearGroupTimeout()
         groupTimeoutRef.current = window.setTimeout(() => {
           playNextGroup()
         }, 300)
+      }, (rawProgress) => {
+        if (rawProgress >= 0.7 && !nextGroupStarted.current) {
+          const nextGroup = animationGroupsRef.current[currentGroupRef.current + 1]
+          if (!nextGroup) return
+          const currentIds = new Set(Object.keys(targetPositionsRef.current))
+          const nextIds = nextGroup.map((a) => (a.arrowType === "pass" ? "ball" : a.playerId))
+          const hasConflict = nextIds.some((id) => currentIds.has(id))
+          if (!hasConflict) {
+            nextGroupStarted.current = true
+            prepareNextGroup(nextGroup, currentGroupRef.current + 1)
+          }
+        }
       })
     )
-  }, [players, ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout])
+  }, [ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout, buildGroupMotion, prepareNextGroup])
 
   const handlePlay = useCallback(() => {
     if (animationFrameRef.current) {
@@ -359,6 +452,8 @@ export function RugbyField({
       .map((key) => grouped[key] ?? [])
 
     currentGroupRef.current = 0
+    nextGroupStarted.current = false
+    overlappedGroupIndexRef.current = null
     animatedPositionsRef.current = {}
     setAnimatedPositions({})
 
@@ -389,10 +484,16 @@ export function RugbyField({
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
     }
+    if (overlapAnimationFrameRef.current) {
+      cancelAnimationFrame(overlapAnimationFrameRef.current)
+      overlapAnimationFrameRef.current = null
+    }
     clearGroupTimeout()
     animatedPositionsRef.current = {}
     setAnimatedPositions({})
     currentGroupRef.current = 0
+    nextGroupStarted.current = false
+    overlappedGroupIndexRef.current = null
     animationGroupsRef.current = []
   }, [clearGroupTimeout])
 
@@ -400,6 +501,9 @@ export function RugbyField({
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
+      }
+      if (overlapAnimationFrameRef.current) {
+        cancelAnimationFrame(overlapAnimationFrameRef.current)
       }
       if (groupTimeoutRef.current !== null) {
         window.clearTimeout(groupTimeoutRef.current)
@@ -1249,7 +1353,9 @@ export function RugbyField({
 
         {/* Player tokens - 16px = ~1.6 units at this scale */}
         {players.map((player) => {
-          const renderPos = animatedPositions[player.id] ?? { x: player.x, y: player.y }
+          const renderPos = animatedPositionsRef.current[player.id]
+            ?? animatedPositions[player.id]
+            ?? { x: player.x, y: player.y }
           return (
           <g
             key={player.id}
