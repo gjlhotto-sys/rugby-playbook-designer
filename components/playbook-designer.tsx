@@ -934,10 +934,87 @@ export function PlaybookDesigner() {
     setTeamColors(prev => ({ ...prev, [team]: color }))
   }, [])
 
-  const handleExportPNG = useCallback(() => {
-    // Placeholder export hook to satisfy sidebar contract.
-    console.warn("PNG export is not implemented yet.")
-  }, [])
+  const handleExportPNG = useCallback(async () => {
+    const fieldElement = document.querySelector("[data-field-canvas]") as HTMLElement | null
+    if (!fieldElement) return
+
+    const svgElement = fieldElement.querySelector("svg")
+    if (!svgElement) return
+
+    const svgData = new XMLSerializer().serializeToString(svgElement)
+    const canvas = document.createElement("canvas")
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    const img = new Image()
+    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
+    const url = URL.createObjectURL(svgBlob)
+
+    await new Promise<void>((resolve) => {
+      img.onload = () => {
+        canvas.width = img.width || svgElement.clientWidth || 1200
+        canvas.height = img.height || svgElement.clientHeight || 1800
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        URL.revokeObjectURL(url)
+        const link = document.createElement("a")
+        link.download = `${(playName || "rugby-play").replace(/[^\w-]+/g, "_")}.png`
+        link.href = canvas.toDataURL("image/png")
+        link.click()
+        resolve()
+      }
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        resolve()
+      }
+      img.src = url
+    })
+  }, [playName])
+
+  const handleExportPDF = useCallback(() => {
+    const printWindow = window.open("", "_blank")
+    if (!printWindow) return
+
+    const svgElement = document.querySelector("[data-field-canvas] svg")
+    const svgData = svgElement ? new XMLSerializer().serializeToString(svgElement) : ""
+    const svgBase64 = svgData ? btoa(unescape(encodeURIComponent(svgData))) : ""
+    const safeNotes = (notes || "No notes added.")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\n/g, "<br/>")
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${playName || "Rugby Play"}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 30px; color: #1a1a1a; }
+          h1 { font-size: 22px; margin-bottom: 4px; }
+          .meta { color: #666; font-size: 13px; margin-bottom: 20px; }
+          .field { width: 100%; max-width: 500px; display: block; margin: 0 auto; }
+          .notes-label { font-weight: bold; margin-top: 20px; margin-bottom: 6px; }
+          .notes { font-size: 13px; line-height: 1.7; color: #333; }
+          .footer { margin-top: 30px; font-size: 11px; color: #999; }
+        </style>
+      </head>
+      <body>
+        <h1>${playName || "Untitled Play"}</h1>
+        <div class="meta">Type: ${playType} &nbsp;&nbsp; Date: ${new Date().toLocaleDateString()}</div>
+        ${svgBase64 ? `<img src="data:image/svg+xml;base64,${svgBase64}" class="field" />` : ""}
+        <div class="notes-label">Coaching Notes</div>
+        <div class="notes">${safeNotes}</div>
+        <div class="footer">Created with TryLine — Rugby Playbook Designer</div>
+        <script>
+          window.onload = function() {
+            setTimeout(() => window.print(), 500)
+          }
+        </script>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }, [notes, playName, playType])
 
   const handleGenerateNotes = useCallback(() => {
     const generatedNotes = generatePlayNotes({
@@ -1143,6 +1220,7 @@ export function PlaybookDesigner() {
           }}
         >
           <div
+            className="rugby-field-container"
             style={{
               transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
               transformOrigin: "top center",
@@ -1278,6 +1356,7 @@ export function PlaybookDesigner() {
         onDeletePlay={handleDeletePlay}
         onDuplicatePlay={handleDuplicatePlay}
         onExportPNG={handleExportPNG}
+        onExportPDF={handleExportPDF}
         selectedPlacementToken={selectedPlacementToken}
         onSelectPlacementToken={setSelectedPlacementToken}
         onApplyAttackFormation={handleApplyAttackFormation}

@@ -1293,6 +1293,7 @@ export function RugbyField({
   return (
     <div
       ref={containerRef}
+      data-field-canvas
       className={`relative h-full w-full flex items-center justify-center ${
         clickToPlaceActive ? "ring-2 ring-primary/60 rounded-md animate-pulse" : ""
       }`}

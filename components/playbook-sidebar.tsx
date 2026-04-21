@@ -33,6 +33,7 @@ interface PlaybookSidebarProps {
   onDeletePlay: (playId: string) => void
   onDuplicatePlay: (play: SavedPlay) => void
   onExportPNG: () => void
+  onExportPDF: () => void
   selectedPlacementToken: SidebarPlacementToken | null
   onSelectPlacementToken: (token: SidebarPlacementToken | null) => void
   onApplyAttackFormation: () => void
@@ -183,6 +184,7 @@ export function PlaybookSidebar({
   onDeletePlay,
   onDuplicatePlay,
   onExportPNG,
+  onExportPDF,
   selectedPlacementToken,
   onSelectPlacementToken,
   onApplyAttackFormation,
@@ -515,25 +517,36 @@ export function PlaybookSidebar({
 
       {/* Actions */}
       <div className="px-2 py-1.5 border-t border-sidebar-border space-y-1 shrink-0">
-        <div className="flex gap-1">
-          <Button
-            onClick={onSavePlay}
-            size="sm"
-            className="flex-1 h-6 text-[9px] bg-primary hover:bg-primary/90 text-primary-foreground"
-            disabled={!hasContent}
-          >
-            <Save className="w-3 h-3 mr-1" />
-            Save
-          </Button>
+        <Button
+          onClick={onSavePlay}
+          size="sm"
+          className="w-full h-6 text-[9px] bg-primary hover:bg-primary/90 text-primary-foreground"
+          disabled={!hasContent}
+        >
+          <Save className="w-3 h-3 mr-1" />
+          Save
+        </Button>
+        <div className="flex flex-col gap-1 mt-1">
           <Button
             onClick={onExportPNG}
             size="sm"
             variant="secondary"
-            className="h-6 text-[9px] px-2"
+            className="w-full h-6 text-[9px] px-2 justify-start"
             disabled={!hasContent}
             title="Export as PNG"
           >
-            <Download className="w-3 h-3" />
+            <Download className="w-3 h-3 mr-1" />
+            🖼 Export PNG
+          </Button>
+          <Button
+            onClick={onExportPDF}
+            size="sm"
+            variant="secondary"
+            className="w-full h-6 text-[9px] px-2 justify-start"
+            disabled={!hasContent}
+            title="Export as PDF"
+          >
+            📄 Export PDF
           </Button>
         </div>
         <Button
