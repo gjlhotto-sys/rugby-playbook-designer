@@ -144,6 +144,10 @@ export function PlaybookDesigner() {
     }
   }, [zoom])
 
+  useEffect(() => {
+    document.title = playName ? `TryLine — ${playName}` : "TryLine"
+  }, [playName])
+
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
 
@@ -934,42 +938,6 @@ export function PlaybookDesigner() {
     setTeamColors(prev => ({ ...prev, [team]: color }))
   }, [])
 
-  const handleExportPNG = useCallback(async () => {
-    const fieldElement = document.querySelector("[data-field-canvas]") as HTMLElement | null
-    if (!fieldElement) return
-
-    const svgElement = fieldElement.querySelector("svg")
-    if (!svgElement) return
-
-    const svgData = new XMLSerializer().serializeToString(svgElement)
-    const canvas = document.createElement("canvas")
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    const img = new Image()
-    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" })
-    const url = URL.createObjectURL(svgBlob)
-
-    await new Promise<void>((resolve) => {
-      img.onload = () => {
-        canvas.width = img.width || svgElement.clientWidth || 1200
-        canvas.height = img.height || svgElement.clientHeight || 1800
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        URL.revokeObjectURL(url)
-        const link = document.createElement("a")
-        link.download = `${(playName || "rugby-play").replace(/[^\w-]+/g, "_")}.png`
-        link.href = canvas.toDataURL("image/png")
-        link.click()
-        resolve()
-      }
-      img.onerror = () => {
-        URL.revokeObjectURL(url)
-        resolve()
-      }
-      img.src = url
-    })
-  }, [playName])
-
   const handleExportPDF = useCallback(() => {
     const printWindow = window.open("", "_blank")
     if (!printWindow) return
@@ -1004,7 +972,7 @@ export function PlaybookDesigner() {
         ${svgBase64 ? `<img src="data:image/svg+xml;base64,${svgBase64}" class="field" />` : ""}
         <div class="notes-label">Coaching Notes</div>
         <div class="notes">${safeNotes}</div>
-        <div class="footer">Created with TryLine — Rugby Playbook Designer</div>
+        <div class="footer">TryLine | tryline.app</div>
         <script>
           window.onload = function() {
             setTimeout(() => window.print(), 500)
@@ -1355,7 +1323,6 @@ export function PlaybookDesigner() {
         onLoadPlay={handleLoadPlay}
         onDeletePlay={handleDeletePlay}
         onDuplicatePlay={handleDuplicatePlay}
-        onExportPNG={handleExportPNG}
         onExportPDF={handleExportPDF}
         selectedPlacementToken={selectedPlacementToken}
         onSelectPlacementToken={setSelectedPlacementToken}

@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Trash2, Save, Copy, Download } from "lucide-react"
+import { Trash2, Save, Copy } from "lucide-react"
 import type { PlayerTemplate, FieldPlayer, TeamColors, SavedPlay, PlayType, BallToken, ConeMarker } from "@/lib/types"
 import { PLAY_TYPES, PLAY_TYPE_COLORS } from "@/lib/types"
 
@@ -32,7 +32,6 @@ interface PlaybookSidebarProps {
   onLoadPlay: (play: SavedPlay) => void
   onDeletePlay: (playId: string) => void
   onDuplicatePlay: (play: SavedPlay) => void
-  onExportPNG: () => void
   onExportPDF: () => void
   selectedPlacementToken: SidebarPlacementToken | null
   onSelectPlacementToken: (token: SidebarPlacementToken | null) => void
@@ -183,7 +182,6 @@ export function PlaybookSidebar({
   onLoadPlay,
   onDeletePlay,
   onDuplicatePlay,
-  onExportPNG,
   onExportPDF,
   selectedPlacementToken,
   onSelectPlacementToken,
@@ -202,7 +200,8 @@ export function PlaybookSidebar({
     <aside className="w-[160px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
       {/* Header */}
       <div className="px-2 py-1.5 border-b border-sidebar-border shrink-0">
-        <h1 className="text-[10px] font-bold text-foreground">Rugby Playbook</h1>
+        <h1 className="text-[10px] font-bold text-foreground">TryLine</h1>
+        <p className="text-[8px] text-muted-foreground">Rugby Playbook Designer</p>
       </div>
 
       {/* Play Name, Type & Notes */}
@@ -527,17 +526,6 @@ export function PlaybookSidebar({
           Save
         </Button>
         <div className="flex flex-col gap-1 mt-1">
-          <Button
-            onClick={onExportPNG}
-            size="sm"
-            variant="secondary"
-            className="w-full h-6 text-[9px] px-2 justify-start"
-            disabled={!hasContent}
-            title="Export as PNG"
-          >
-            <Download className="w-3 h-3 mr-1" />
-            🖼 Export PNG
-          </Button>
           <Button
             onClick={onExportPDF}
             size="sm"
