@@ -583,6 +583,86 @@ export function RugbyField({
     onFieldClick(x, y)
   }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect])
 
+  const resolvePlayerFromArrowPlayerId = useCallback((arrowPlayerId: string) => {
+    return players.find((p) =>
+      p.id === arrowPlayerId ||
+      `attack-${p.number}` === arrowPlayerId ||
+      `defense-${p.number}` === arrowPlayerId ||
+      `defence-${p.number}` === arrowPlayerId ||
+      `${p.team}-${p.number}` === arrowPlayerId
+    ) ?? null
+  }, [players])
+
+  const tryCreatePassToPoint = useCallback((toX: number, toY: number) => {
+    if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return false
+    const passer = players.find((p) =>
+      p.id === passerSelected ||
+      `attack-${p.number}` === passerSelected ||
+      `defense-${p.number}` === passerSelected ||
+      `defence-${p.number}` === passerSelected ||
+      `${p.team}-${p.number}` === passerSelected
+    )
+    if (!passer) return false
+
+    const receiver = players.reduce<FieldPlayer | null>((closest, candidate) => {
+      const candidateDist = Math.hypot(candidate.x - toX, candidate.y - toY)
+      if (!closest) return candidate
+      const closestDist = Math.hypot(closest.x - toX, closest.y - toY)
+      return candidateDist < closestDist ? candidate : closest
+    }, null)
+    if (!receiver || receiver.id === passer.id) return false
+
+    pendingPassSnapRef.current = { passerId: passerSelected, target: { x: toX, y: toY } }
+    onCreatePassArrow(passerSelected, receiver.id)
+    onPasserSelect(null)
+    setHoverPassEndpoint(null)
+    return true
+  }, [mode, arrowType, passerSelected, players, onCreatePassArrow, onPasserSelect])
+
+  const handlePassCanvasMouseDownCapture = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return
+    if (!svgRef.current) return
+
+    const rect = svgRef.current.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const clickY = e.clientY - rect.top
+    const xScale = rect.width / CANVAS_WIDTH
+    const yScale = rect.height / CANVAS_HEIGHT
+
+    for (const arrow of arrows) {
+      if (arrow.arrowType === "pass") continue
+      const endX = arrow.toX * xScale
+      const endY = arrow.toY * yScale
+      const dist = Math.hypot(clickX - endX, clickY - endY)
+      if (dist < 30) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (tryCreatePassToPoint(arrow.toX, arrow.toY)) return
+      }
+    }
+
+    for (const player of players) {
+      const px = player.x * xScale
+      const py = player.y * yScale
+      const dist = Math.hypot(clickX - px, clickY - py)
+      if (dist < 20) {
+        const runArrow = arrows.find((a) =>
+          (a.playerId === player.id ||
+            a.playerId === `attack-${player.number}` ||
+            a.playerId === `defense-${player.number}` ||
+            a.playerId === `defence-${player.number}` ||
+            a.playerId === `${player.team}-${player.number}`) &&
+          a.arrowType !== "pass"
+        )
+        const targetX = runArrow ? runArrow.toX : player.x
+        const targetY = runArrow ? runArrow.toY : player.y
+        e.preventDefault()
+        e.stopPropagation()
+        if (tryCreatePassToPoint(targetX, targetY)) return
+      }
+    }
+  }, [mode, arrowType, passerSelected, arrows, players, tryCreatePassToPoint])
+
   const getPassTarget = useCallback((receiverId: string) => {
     const receiver = players.find((p) => p.id === receiverId)
     const receiverRunArrow = arrows.find((a) => {
@@ -1242,6 +1322,7 @@ export function RugbyField({
         preserveAspectRatio="xMidYMid meet"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
+        onMouseDownCapture={handlePassCanvasMouseDownCapture}
         onClick={handleFieldClick}
       >
         {/* Buffer zone background (darker green) */}
@@ -1341,6 +1422,34 @@ export function RugbyField({
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
+        {mode === "draw" && arrowType === "pass" && passerSelected &&
+          arrows
+            .filter((a) => a.arrowType !== "pass")
+            .map((arrow) => (
+              <g key={`endpoint-${arrow.id}`}>
+                <circle
+                  cx={arrow.toX}
+                  cy={arrow.toY}
+                  r="4.5"
+                  fill="transparent"
+                  style={{ cursor: "crosshair" }}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    tryCreatePassToPoint(arrow.toX, arrow.toY)
+                  }}
+                />
+                <circle
+                  cx={arrow.toX}
+                  cy={arrow.toY}
+                  r="1.4"
+                  fill="rgba(234, 179, 8, 0.4)"
+                  stroke="#EAB308"
+                  strokeWidth="0.35"
+                  style={{ cursor: "crosshair", pointerEvents: "none" }}
+                />
+              </g>
+            ))}
         {mode === "draw" && arrowType === "pass" && hoverPassEndpoint && (
           <g className="pointer-events-none" transform={`translate(${hoverPassEndpoint.x}, ${hoverPassEndpoint.y})`}>
             <circle r="2.1" fill="none" stroke="#EAB308" strokeWidth="0.2" strokeDasharray="0.6,0.4" opacity="0.9" />
