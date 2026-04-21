@@ -231,6 +231,7 @@ export function RugbyField({
 
     const currentGroup = groups[groupIndex]
     const groupTargets: Record<string, { x: number; y: number }> = {}
+    let hasPassInGroup = false
 
     currentGroup.forEach((arrow) => {
       const player = players.find((p) =>
@@ -240,10 +241,33 @@ export function RugbyField({
         arrow.playerId === `defence-${p.number}` ||
         arrow.playerId === `${p.team}-${p.number}`
       )
+
+      if (arrow.arrowType === "pass") {
+        hasPassInGroup = true
+        const receiverCandidates = players.filter(
+          (p) => Math.abs(p.x - arrow.toX) < 30 && Math.abs(p.y - arrow.toY) < 30
+        )
+        const receiver = receiverCandidates.length > 0
+          ? receiverCandidates.reduce((closest, candidate) => {
+              const closestDist = Math.hypot(closest.x - arrow.toX, closest.y - arrow.toY)
+              const candidateDist = Math.hypot(candidate.x - arrow.toX, candidate.y - arrow.toY)
+              return candidateDist < closestDist ? candidate : closest
+            })
+          : null
+
+        startPositionsRef.current.ball = animatedPositionsRef.current.ball ?? {
+          x: player?.x ?? arrow.fromX,
+          y: player?.y ?? arrow.fromY,
+        }
+        groupTargets.ball = {
+          x: receiver?.x ?? arrow.toX,
+          y: receiver?.y ?? arrow.toY,
+        }
+        return
+      }
+
       if (player) {
-        startPositionsRef.current[player.id] =
-          animatedPositionsRef.current[player.id] ??
-          { x: player.x, y: player.y }
+        startPositionsRef.current[player.id] = animatedPositionsRef.current[player.id] ?? { x: player.x, y: player.y }
         groupTargets[player.id] = { x: arrow.toX, y: arrow.toY }
       }
     })
@@ -256,13 +280,20 @@ export function RugbyField({
       animateGroupTick(ts, () => {
         currentGroupRef.current += 1
         Object.assign(animatedPositionsRef.current, groupTargets)
+        if (hasPassInGroup && groupTargets.ball) {
+          if (ball) {
+            onBallDrag(groupTargets.ball.x, groupTargets.ball.y)
+          }
+          delete animatedPositionsRef.current.ball
+          setAnimatedPositions({ ...animatedPositionsRef.current })
+        }
         clearGroupTimeout()
         groupTimeoutRef.current = window.setTimeout(() => {
           playNextGroup()
         }, 300)
       })
     )
-  }, [players, animationSpeed, animateGroupTick, clearGroupTimeout])
+  }, [players, ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout])
 
   const handlePlay = useCallback(() => {
     if (animationFrameRef.current) {
@@ -1174,33 +1205,47 @@ export function RugbyField({
         ))}
 
         {/* Ball token */}
-        {ball && (
-          <g
-            className={`ball-token ${mode === "move" ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
-            transform={`translate(${ball.x}, ${ball.y})`}
-            onMouseDown={handleBallMouseDown}
-            onContextMenu={(e) => handleContextMenu(e, "ball", "ball")}
-          >
-            <ellipse
-              rx="1.2"
-              ry="0.8"
-              fill="#EAB308"
-              stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.3)"}
-              strokeWidth={selectedBall ? "0.3" : "0.1"}
-              className="transition-all"
-            />
-            <text
-              y="0.25"
-              fontSize="0.5"
-              fill="#000"
-              textAnchor="middle"
-              dominantBaseline="middle"
-              className="pointer-events-none font-bold select-none"
-            >
-              BALL
-            </text>
-          </g>
-        )}
+        {(() => {
+          const animatedBall = animatedPositions["ball"]
+          const ballRenderPos = animatedBall ?? (ball ? { x: ball.x, y: ball.y } : null)
+          if (!ballRenderPos) return null
+
+          if (ball) {
+            return (
+              <g
+                className={`ball-token ${mode === "move" ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+                transform={`translate(${ballRenderPos.x}, ${ballRenderPos.y})`}
+                onMouseDown={handleBallMouseDown}
+                onContextMenu={(e) => handleContextMenu(e, "ball", "ball")}
+              >
+                <ellipse
+                  rx="1.2"
+                  ry="0.8"
+                  fill="#EAB308"
+                  stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.3)"}
+                  strokeWidth={selectedBall ? "0.3" : "0.1"}
+                  className="transition-all"
+                />
+                <text
+                  y="0.25"
+                  fontSize="0.5"
+                  fill="#000"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  className="pointer-events-none font-bold select-none"
+                >
+                  BALL
+                </text>
+              </g>
+            )
+          }
+
+          return (
+            <g className="pointer-events-none" transform={`translate(${ballRenderPos.x}, ${ballRenderPos.y})`}>
+              <ellipse rx="1.2" ry="0.8" fill="#EAB308" stroke="rgba(0,0,0,0.3)" strokeWidth="0.1" />
+            </g>
+          )
+        })()}
 
         {/* Player tokens - 16px = ~1.6 units at this scale */}
         {players.map((player) => {
