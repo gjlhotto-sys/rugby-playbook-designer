@@ -161,6 +161,7 @@ export function RugbyField({
   const overlappedGroupIndexRef = useRef<number | null>(null)
   const pendingPassSnapRef = useRef<{
     passerId: string
+    receiverId: string
     target: { x: number; y: number }
   } | null>(null)
   const [hoverPassEndpoint, setHoverPassEndpoint] = useState<{ x: number; y: number } | null>(null)
@@ -250,6 +251,50 @@ export function RugbyField({
     }
   }, [])
 
+  const resolvePlayerFromArrowPlayerId = useCallback((arrowPlayerId: string) => {
+    return (
+      players.find((p) =>
+        p.id === arrowPlayerId ||
+        `attack-${p.number}` === arrowPlayerId ||
+        `defense-${p.number}` === arrowPlayerId ||
+        `defence-${p.number}` === arrowPlayerId ||
+        `${p.team}-${p.number}` === arrowPlayerId
+      ) ?? null
+    )
+  }, [players])
+
+  const getPassTarget = useCallback((passArrow: Arrow) => {
+    if (!passArrow.receiverId) {
+      return { x: passArrow.toX, y: passArrow.toY }
+    }
+
+    const receiver = players.find((p) =>
+      p.id === passArrow.receiverId ||
+      `attack-${p.number}` === passArrow.receiverId ||
+      `defense-${p.number}` === passArrow.receiverId ||
+      `defence-${p.number}` === passArrow.receiverId ||
+      `${p.team}-${p.number}` === passArrow.receiverId
+    )
+
+    if (!receiver) return { x: passArrow.toX, y: passArrow.toY }
+
+    const receiverRunArrow = arrows.find(
+      (a) =>
+        (a.playerId === receiver.id ||
+          a.playerId === `attack-${receiver.number}` ||
+          a.playerId === `defense-${receiver.number}` ||
+          a.playerId === `defence-${receiver.number}` ||
+          a.playerId === `${receiver.team}-${receiver.number}`) &&
+        a.arrowType !== "pass"
+    )
+
+    if (receiverRunArrow) {
+      return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+    }
+
+    return animatedPositionsRef.current[receiver.id] ?? { x: receiver.x, y: receiver.y }
+  }, [players, arrows])
+
   const buildGroupMotion = useCallback((group: SequencedArrow[]) => {
     const starts: Record<string, { x: number; y: number }> = {}
     const targets: Record<string, { x: number; y: number }> = {}
@@ -266,20 +311,9 @@ export function RugbyField({
 
       if (arrow.arrowType === "pass") {
         hasPassInGroup = true
-        const receiverCandidates = players.filter(
-          (p) => Math.abs(p.x - arrow.toX) < 30 && Math.abs(p.y - arrow.toY) < 30
-        )
-        const receiver = receiverCandidates.length > 0
-          ? receiverCandidates.reduce((closest, candidate) => {
-              const closestDist = Math.hypot(closest.x - arrow.toX, closest.y - arrow.toY)
-              const candidateDist = Math.hypot(candidate.x - arrow.toX, candidate.y - arrow.toY)
-              return candidateDist < closestDist ? candidate : closest
-            })
-          : null
-
         const passerPos = player ? getPlayerCurrentPos(player.id) : null
         starts.ball = animatedPositionsRef.current.ball ?? passerPos ?? { x: arrow.fromX, y: arrow.fromY }
-        targets.ball = { x: receiver?.x ?? arrow.toX, y: receiver?.y ?? arrow.toY }
+        targets.ball = getPassTarget(arrow)
         return
       }
 
@@ -293,7 +327,7 @@ export function RugbyField({
     })
 
     return { starts, targets, hasPassInGroup }
-  }, [players, getPlayerCurrentPos])
+  }, [players, getPlayerCurrentPos, getPassTarget])
 
   const prepareNextGroup = useCallback((group: SequencedArrow[], groupIndex: number) => {
     const { starts, targets, hasPassInGroup } = buildGroupMotion(group)
@@ -583,17 +617,7 @@ export function RugbyField({
     onFieldClick(x, y)
   }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect])
 
-  const resolvePlayerFromArrowPlayerId = useCallback((arrowPlayerId: string) => {
-    return players.find((p) =>
-      p.id === arrowPlayerId ||
-      `attack-${p.number}` === arrowPlayerId ||
-      `defense-${p.number}` === arrowPlayerId ||
-      `defence-${p.number}` === arrowPlayerId ||
-      `${p.team}-${p.number}` === arrowPlayerId
-    ) ?? null
-  }, [players])
-
-  const tryCreatePassToPoint = useCallback((toX: number, toY: number) => {
+  const tryCreatePassToPoint = useCallback((toX: number, toY: number, receiverIdForArrow: string) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return false
     const passer = players.find((p) =>
       p.id === passerSelected ||
@@ -604,20 +628,31 @@ export function RugbyField({
     )
     if (!passer) return false
 
-    const receiver = players.reduce<FieldPlayer | null>((closest, candidate) => {
-      const candidateDist = Math.hypot(candidate.x - toX, candidate.y - toY)
-      if (!closest) return candidate
-      const closestDist = Math.hypot(closest.x - toX, closest.y - toY)
-      return candidateDist < closestDist ? candidate : closest
-    }, null)
+    const receiver = resolvePlayerFromArrowPlayerId(receiverIdForArrow)
     if (!receiver || receiver.id === passer.id) return false
 
-    pendingPassSnapRef.current = { passerId: passerSelected, target: { x: toX, y: toY } }
+    const pendingArrow: Arrow = {
+      id: "pending",
+      playerId: passer.id,
+      team: passer.team,
+      fromX: passer.x,
+      fromY: passer.y,
+      toX,
+      toY,
+      arrowType: "pass",
+      receiverId: receiverIdForArrow,
+    }
+
+    pendingPassSnapRef.current = {
+      passerId: passerSelected,
+      receiverId: receiverIdForArrow,
+      target: getPassTarget(pendingArrow),
+    }
     onCreatePassArrow(passerSelected, receiver.id)
     onPasserSelect(null)
     setHoverPassEndpoint(null)
     return true
-  }, [mode, arrowType, passerSelected, players, onCreatePassArrow, onPasserSelect])
+  }, [mode, arrowType, passerSelected, players, onCreatePassArrow, onPasserSelect, resolvePlayerFromArrowPlayerId, getPassTarget])
 
   const handlePassCanvasMouseDownCapture = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return
@@ -637,7 +672,7 @@ export function RugbyField({
       if (dist < 30) {
         e.preventDefault()
         e.stopPropagation()
-        if (tryCreatePassToPoint(arrow.toX, arrow.toY)) return
+        if (tryCreatePassToPoint(arrow.toX, arrow.toY, arrow.playerId)) return
       }
     }
 
@@ -658,27 +693,10 @@ export function RugbyField({
         const targetY = runArrow ? runArrow.toY : player.y
         e.preventDefault()
         e.stopPropagation()
-        if (tryCreatePassToPoint(targetX, targetY)) return
+        if (tryCreatePassToPoint(targetX, targetY, player.id)) return
       }
     }
   }, [mode, arrowType, passerSelected, arrows, players, tryCreatePassToPoint])
-
-  const getPassTarget = useCallback((receiverId: string) => {
-    const receiver = players.find((p) => p.id === receiverId)
-    const receiverRunArrow = arrows.find((a) => {
-      const matchesReceiver =
-        a.playerId === receiverId ||
-        (receiver ? a.playerId === `attack-${receiver.number}` : false) ||
-        (receiver ? a.playerId === `defense-${receiver.number}` : false)
-      return matchesReceiver && a.arrowType !== "pass" && a.arrowType !== "decoy"
-    })
-
-    if (receiverRunArrow) {
-      return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
-    }
-
-    return receiver ? { x: receiver.x, y: receiver.y } : null
-  }, [arrows, players])
 
   const handlePlayerMouseDown = useCallback((e: React.MouseEvent, player: FieldPlayer) => {
     e.stopPropagation()
@@ -697,11 +715,29 @@ export function RugbyField({
           setHoverPassEndpoint(null)
           return
         }
-        const passTarget = getPassTarget(player.id)
-        if (passTarget) {
+        const passer = players.find((p) =>
+          p.id === passerSelected ||
+          `attack-${p.number}` === passerSelected ||
+          `defense-${p.number}` === passerSelected ||
+          `defence-${p.number}` === passerSelected ||
+          `${p.team}-${p.number}` === passerSelected
+        )
+        if (passer) {
+          const pendingArrow: Arrow = {
+            id: "pending",
+            playerId: passer.id,
+            team: passer.team,
+            fromX: passer.x,
+            fromY: passer.y,
+            toX: player.x,
+            toY: player.y,
+            arrowType: "pass",
+            receiverId: player.id,
+          }
           pendingPassSnapRef.current = {
             passerId: passerSelected,
-            target: passTarget,
+            receiverId: player.id,
+            target: getPassTarget(pendingArrow),
           }
         }
         onCreatePassArrow(passerSelected, player.id)
@@ -751,7 +787,7 @@ export function RugbyField({
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, getPassTarget])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, getPassTarget])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -763,12 +799,19 @@ export function RugbyField({
 
     if (!latestPassArrow) return
 
-    const needsUpdate =
+    const updates: Partial<Arrow> = {}
+    if (
       Math.abs(latestPassArrow.toX - pending.target.x) > 0.001 ||
       Math.abs(latestPassArrow.toY - pending.target.y) > 0.001
-
-    if (needsUpdate) {
-      onArrowUpdate(latestPassArrow.id, { toX: pending.target.x, toY: pending.target.y })
+    ) {
+      updates.toX = pending.target.x
+      updates.toY = pending.target.y
+    }
+    if (pending.receiverId && latestPassArrow.receiverId !== pending.receiverId) {
+      updates.receiverId = pending.receiverId
+    }
+    if (Object.keys(updates).length > 0) {
+      onArrowUpdate(latestPassArrow.id, updates)
     }
     pendingPassSnapRef.current = null
   }, [arrows, onArrowUpdate])
@@ -1509,8 +1552,26 @@ export function RugbyField({
             transform={`translate(${renderPos.x}, ${renderPos.y})`}
             onMouseDown={(e) => handlePlayerMouseDown(e, player)}
             onMouseEnter={() => {
-              if (mode === "draw" && arrowType === "pass") {
-                const target = getPassTarget(player.id)
+              if (mode === "draw" && arrowType === "pass" && passerSelected) {
+                const passer = players.find((p) =>
+                  p.id === passerSelected ||
+                  `attack-${p.number}` === passerSelected ||
+                  `defense-${p.number}` === passerSelected ||
+                  `defence-${p.number}` === passerSelected ||
+                  `${p.team}-${p.number}` === passerSelected
+                )
+                if (!passer) return
+                const target = getPassTarget({
+                  id: "hover",
+                  playerId: passer.id,
+                  team: passer.team,
+                  fromX: passer.x,
+                  fromY: passer.y,
+                  toX: player.x,
+                  toY: player.y,
+                  arrowType: "pass",
+                  receiverId: player.id,
+                })
                 setHoverPassEndpoint(target)
               }
             }}
@@ -1567,7 +1628,7 @@ export function RugbyField({
                   style={{ cursor: "crosshair" }}
                   onClick={(e) => {
                     e.stopPropagation()
-                    tryCreatePassToPoint(arrow.toX, arrow.toY)
+                    tryCreatePassToPoint(arrow.toX, arrow.toY, arrow.playerId)
                   }}
                 />
                 <circle
