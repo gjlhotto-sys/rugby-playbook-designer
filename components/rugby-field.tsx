@@ -162,6 +162,7 @@ export function RugbyField({
   const pendingPassSnapRef = useRef<{
     passerId: string
     receiverId: string
+    start: { x: number; y: number }
     target: { x: number; y: number }
   } | null>(null)
   const [hoverPassEndpoint, setHoverPassEndpoint] = useState<{ x: number; y: number } | null>(null)
@@ -638,28 +639,87 @@ export function RugbyField({
     const receiver = resolvePlayerFromArrowPlayerId(receiverIdForArrow)
     if (!receiver || receiver.id === passer.id) return false
 
-    const pendingArrow: Arrow = {
-      id: "pending",
-      playerId: passer.id,
-      team: passer.team,
-      fromX: passer.x,
-      fromY: passer.y,
-      toX,
-      toY,
-      arrowType: "pass",
-      receiverId: receiverIdForArrow,
+    const calculatePassTarget = (
+      receiverId: string,
+      clickedToX: number,
+      clickedToY: number,
+      passTimestamp: number
+    ) => {
+      const targetReceiver = players.find((p) =>
+        p.id === receiverId ||
+        `attack-${p.number}` === receiverId ||
+        `defense-${p.number}` === receiverId ||
+        `defence-${p.number}` === receiverId
+      )
+      if (!targetReceiver) return { x: clickedToX, y: clickedToY }
+
+      const receiverRunArrow = arrows.find(
+        (a) =>
+          (a.playerId === targetReceiver.id ||
+            a.playerId === `attack-${targetReceiver.number}` ||
+            a.playerId === `defense-${targetReceiver.number}` ||
+            a.playerId === `defence-${targetReceiver.number}`) &&
+          a.arrowType !== "pass"
+      )
+
+      if (receiverRunArrow) {
+        const runTime = (receiverRunArrow as SequencedArrow).timestamp ?? 0
+        if (passTimestamp > runTime) {
+          return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+        } else {
+          return { x: targetReceiver.x, y: targetReceiver.y }
+        }
+      }
+
+      return { x: targetReceiver.x, y: targetReceiver.y }
     }
+
+    const calculatePassStart = (
+      passerId: string,
+      passTimestamp: number
+    ) => {
+      const startPasser = players.find((p) =>
+        p.id === passerId ||
+        `attack-${p.number}` === passerId ||
+        `defense-${p.number}` === passerId ||
+        `defence-${p.number}` === passerId
+      )
+      if (!startPasser) return null
+
+      const passerRunArrow = arrows.find(
+        (a) =>
+          (a.playerId === startPasser.id ||
+            a.playerId === `attack-${startPasser.number}` ||
+            a.playerId === `defense-${startPasser.number}` ||
+            a.playerId === `defence-${startPasser.number}`) &&
+          a.arrowType !== "pass"
+      )
+
+      if (passerRunArrow) {
+        const runTime = (passerRunArrow as SequencedArrow).timestamp ?? 0
+        if (passTimestamp > runTime) {
+          return { x: passerRunArrow.toX, y: passerRunArrow.toY }
+        }
+      }
+
+      return { x: startPasser.x, y: startPasser.y }
+    }
+
+    const now = Date.now()
+    const passTarget = calculatePassTarget(receiverIdForArrow, toX, toY, now)
+    const passStart = calculatePassStart(passerSelected, now)
 
     pendingPassSnapRef.current = {
       passerId: passerSelected,
       receiverId: receiverIdForArrow,
-      target: getPassTarget(pendingArrow),
+      start: passStart ?? { x: passer.x, y: passer.y },
+      target: passTarget,
     }
     onCreatePassArrow(passerSelected, receiver.id)
     onPasserSelect(null)
     setHoverPassEndpoint(null)
     return true
-  }, [mode, arrowType, passerSelected, players, onCreatePassArrow, onPasserSelect, resolvePlayerFromArrowPlayerId, getPassTarget])
+  }, [mode, arrowType, passerSelected, players, arrows, onCreatePassArrow, onPasserSelect, resolvePlayerFromArrowPlayerId])
 
   const handlePassCanvasMouseDownCapture = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return
@@ -730,21 +790,80 @@ export function RugbyField({
           `${p.team}-${p.number}` === passerSelected
         )
         if (passer) {
-          const pendingArrow: Arrow = {
-            id: "pending",
-            playerId: passer.id,
-            team: passer.team,
-            fromX: passer.x,
-            fromY: passer.y,
-            toX: player.x,
-            toY: player.y,
-            arrowType: "pass",
-            receiverId: player.id,
+          const calculatePassTarget = (
+            receiverId: string,
+            clickedToX: number,
+            clickedToY: number,
+            passTimestamp: number
+          ) => {
+            const targetReceiver = players.find((p) =>
+              p.id === receiverId ||
+              `attack-${p.number}` === receiverId ||
+              `defense-${p.number}` === receiverId ||
+              `defence-${p.number}` === receiverId
+            )
+            if (!targetReceiver) return { x: clickedToX, y: clickedToY }
+
+            const receiverRunArrow = arrows.find(
+              (a) =>
+                (a.playerId === targetReceiver.id ||
+                  a.playerId === `attack-${targetReceiver.number}` ||
+                  a.playerId === `defense-${targetReceiver.number}` ||
+                  a.playerId === `defence-${targetReceiver.number}`) &&
+                a.arrowType !== "pass"
+            )
+
+            if (receiverRunArrow) {
+              const runTime = (receiverRunArrow as SequencedArrow).timestamp ?? 0
+              if (passTimestamp > runTime) {
+                return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+              } else {
+                return { x: targetReceiver.x, y: targetReceiver.y }
+              }
+            }
+
+            return { x: targetReceiver.x, y: targetReceiver.y }
           }
+
+          const calculatePassStart = (
+            passerId: string,
+            passTimestamp: number
+          ) => {
+            const startPasser = players.find((p) =>
+              p.id === passerId ||
+              `attack-${p.number}` === passerId ||
+              `defense-${p.number}` === passerId ||
+              `defence-${p.number}` === passerId
+            )
+            if (!startPasser) return null
+
+            const passerRunArrow = arrows.find(
+              (a) =>
+                (a.playerId === startPasser.id ||
+                  a.playerId === `attack-${startPasser.number}` ||
+                  a.playerId === `defense-${startPasser.number}` ||
+                  a.playerId === `defence-${startPasser.number}`) &&
+                a.arrowType !== "pass"
+            )
+
+            if (passerRunArrow) {
+              const runTime = (passerRunArrow as SequencedArrow).timestamp ?? 0
+              if (passTimestamp > runTime) {
+                return { x: passerRunArrow.toX, y: passerRunArrow.toY }
+              }
+            }
+
+            return { x: startPasser.x, y: startPasser.y }
+          }
+
+          const now = Date.now()
+          const passTarget = calculatePassTarget(player.id, player.x, player.y, now)
+          const passStart = calculatePassStart(passerSelected, now)
           pendingPassSnapRef.current = {
             passerId: passerSelected,
             receiverId: player.id,
-            target: getPassTarget(pendingArrow),
+            start: passStart ?? { x: passer.x, y: passer.y },
+            target: passTarget,
           }
         }
         onCreatePassArrow(passerSelected, player.id)
@@ -794,7 +913,7 @@ export function RugbyField({
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, getPassTarget])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -813,6 +932,13 @@ export function RugbyField({
     ) {
       updates.toX = pending.target.x
       updates.toY = pending.target.y
+    }
+    if (
+      Math.abs(latestPassArrow.fromX - pending.start.x) > 0.001 ||
+      Math.abs(latestPassArrow.fromY - pending.start.y) > 0.001
+    ) {
+      updates.fromX = pending.start.x
+      updates.fromY = pending.start.y
     }
     if (pending.receiverId && latestPassArrow.receiverId !== pending.receiverId) {
       updates.receiverId = pending.receiverId
