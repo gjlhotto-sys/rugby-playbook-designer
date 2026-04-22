@@ -664,12 +664,23 @@ export function PlaybookDesigner() {
       const player = fieldPlayers.find(p => p.id === selectedPlayerId)
       if (!player) return
 
+      const playerLastRunArrow = [...arrows]
+        .filter(a =>
+          (a.playerId === selectedPlayerId ||
+            a.playerId === `attack-${player.number}` ||
+            a.playerId === `defense-${player.number}`) &&
+          a.arrowType !== "pass" &&
+          a.arrowType !== "kick"
+        )
+        .sort((a, b) => ((a as { timestamp?: number }).timestamp ?? 0) - ((b as { timestamp?: number }).timestamp ?? 0))
+        .pop()
+
       const newArrow: Arrow = {
         id: `arrow-${Date.now()}`,
         playerId: selectedPlayerId,
         team: player.team,
-        fromX: player.x,
-        fromY: player.y,
+        fromX: playerLastRunArrow ? playerLastRunArrow.toX : player.x,
+        fromY: playerLastRunArrow ? playerLastRunArrow.toY : player.y,
         toX: x,
         toY: y,
         arrowType,

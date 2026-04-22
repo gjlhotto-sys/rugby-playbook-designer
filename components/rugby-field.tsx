@@ -1688,6 +1688,23 @@ export function RugbyField({
 
   const selectedArrow = arrows.find(a => a.id === selectedArrowId)
   const arrowControlsPos = selectedArrow ? getArrowControlsPosition(selectedArrow) : null
+  const selectedPlayerForRunChain = selectedPlayerId
+    ? players.find((p) => p.id === selectedPlayerId) ?? null
+    : null
+  const selectedPlayerLastRunArrow = selectedPlayerForRunChain
+    ? [...arrows]
+      .filter((a) =>
+        (a.playerId === selectedPlayerForRunChain.id ||
+          a.playerId === `attack-${selectedPlayerForRunChain.number}` ||
+          a.playerId === `defense-${selectedPlayerForRunChain.number}`) &&
+        a.arrowType !== "pass" &&
+        a.arrowType !== "kick"
+      )
+      .sort((a, b) => ((a as SequencedArrow).timestamp ?? 0) - ((b as SequencedArrow).timestamp ?? 0))
+      .pop()
+    : null
+  const selectedPlayerChainColor = selectedPlayerForRunChain ? getTeamColor(selectedPlayerForRunChain.team) : "#ffffff"
+  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && !!selectedPlayerLastRunArrow
 
   return (
     <div
@@ -1713,7 +1730,7 @@ export function RugbyField({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-        className={`max-w-full ${clickToPlaceActive ? "cursor-crosshair" : ""}`}
+        className={`max-w-full ${clickToPlaceActive || showRunChainStartIndicator ? "cursor-crosshair" : ""}`}
         style={{ 
           filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))",
           height: `${zoom}%`,
@@ -1822,6 +1839,28 @@ export function RugbyField({
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
+        {showRunChainStartIndicator && selectedPlayerLastRunArrow && (
+          <g className="pointer-events-none">
+            <circle
+              cx={selectedPlayerLastRunArrow.toX}
+              cy={selectedPlayerLastRunArrow.toY}
+              r="1.8"
+              fill="none"
+              stroke={selectedPlayerChainColor}
+              strokeWidth="0.3"
+              strokeDasharray="0.8,0.4"
+              className="animate-pulse pointer-events-none"
+            />
+            <circle
+              cx={selectedPlayerLastRunArrow.toX}
+              cy={selectedPlayerLastRunArrow.toY}
+              r="0.5"
+              fill={selectedPlayerChainColor}
+              opacity="0.8"
+              className="pointer-events-none"
+            />
+          </g>
+        )}
         {mode === "draw" && arrowType === "pass" && hoverPassEndpoint && (
           <g className="pointer-events-none" transform={`translate(${hoverPassEndpoint.x}, ${hoverPassEndpoint.y})`}>
             <circle r="2.1" fill="none" stroke="#EAB308" strokeWidth="0.2" strokeDasharray="0.6,0.4" opacity="0.9" />
