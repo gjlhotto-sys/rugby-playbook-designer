@@ -334,38 +334,75 @@ export function PlaybookDesigner() {
 
   const handleApplyLineoutFormation = useCallback(() => {
     applyFormationBatch([
-      // Attack lineout structure (left side)
-      { team: "attack", number: 2, xPercent: 0.05, yPercent: 0.58 },
-      { team: "attack", number: 1, xPercent: 0.13, yPercent: 0.58 },
-      { team: "attack", number: 4, xPercent: 0.18, yPercent: 0.58 },
-      { team: "attack", number: 6, xPercent: 0.23, yPercent: 0.58 },
-      { team: "attack", number: 5, xPercent: 0.28, yPercent: 0.58 },
-      { team: "attack", number: 7, xPercent: 0.33, yPercent: 0.58 },
-      { team: "attack", number: 3, xPercent: 0.38, yPercent: 0.58 },
-      { team: "attack", number: 8, xPercent: 0.40, yPercent: 0.60 },
-      { team: "attack", number: 9, xPercent: 0.42, yPercent: 0.63 },
-      { team: "attack", number: 10, xPercent: 0.48, yPercent: 0.65 },
-      { team: "attack", number: 12, xPercent: 0.56, yPercent: 0.65 },
-      { team: "attack", number: 13, xPercent: 0.64, yPercent: 0.65 },
-      { team: "attack", number: 14, xPercent: 0.78, yPercent: 0.64 },
-      { team: "attack", number: 11, xPercent: 0.10, yPercent: 0.70 },
-      { team: "attack", number: 15, xPercent: 0.55, yPercent: 0.74 },
-      // Defense mirrored to oppose lineout
-      { team: "defense", number: 2, xPercent: 0.05, yPercent: 0.52 },
-      { team: "defense", number: 1, xPercent: 0.13, yPercent: 0.52 },
-      { team: "defense", number: 4, xPercent: 0.18, yPercent: 0.52 },
-      { team: "defense", number: 6, xPercent: 0.23, yPercent: 0.52 },
-      { team: "defense", number: 5, xPercent: 0.28, yPercent: 0.52 },
-      { team: "defense", number: 7, xPercent: 0.33, yPercent: 0.52 },
-      { team: "defense", number: 3, xPercent: 0.38, yPercent: 0.52 },
-      { team: "defense", number: 8, xPercent: 0.40, yPercent: 0.52 },
-      { team: "defense", number: 9, xPercent: 0.42, yPercent: 0.52 },
-      { team: "defense", number: 10, xPercent: 0.48, yPercent: 0.50 },
-      { team: "defense", number: 12, xPercent: 0.56, yPercent: 0.50 },
-      { team: "defense", number: 13, xPercent: 0.64, yPercent: 0.50 },
-      { team: "defense", number: 14, xPercent: 0.78, yPercent: 0.50 },
-      { team: "defense", number: 11, xPercent: 0.10, yPercent: 0.50 },
-      { team: "defense", number: 15, xPercent: 0.55, yPercent: 0.44 },
+      // Attack lineout on left touchline at attack 10m (y=71)
+      { team: "attack", number: 2, xPercent: -0.028571, yPercent: 0.590909 },
+      { team: "attack", number: 1, xPercent: 0.057143, yPercent: 0.590909 },
+      { team: "attack", number: 4, xPercent: 0.114286, yPercent: 0.590909 },
+      { team: "attack", number: 6, xPercent: 0.171429, yPercent: 0.590909 },
+      { team: "attack", number: 5, xPercent: 0.228571, yPercent: 0.590909 },
+      { team: "attack", number: 7, xPercent: 0.285714, yPercent: 0.590909 },
+      { team: "attack", number: 3, xPercent: 0.342857, yPercent: 0.590909 },
+      { team: "attack", number: 8, xPercent: 0.371429, yPercent: 0.618182 },
+      { team: "attack", number: 9, xPercent: 0.371429, yPercent: 0.645455 },
+      { team: "attack", number: 10, xPercent: 0.428571, yPercent: 0.681818 },
+      { team: "attack", number: 12, xPercent: 0.542857, yPercent: 0.681818 },
+      { team: "attack", number: 13, xPercent: 0.657143, yPercent: 0.681818 },
+      { team: "attack", number: 14, xPercent: 0.828571, yPercent: 0.681818 },
+      { team: "attack", number: 11, xPercent: 0.057143, yPercent: 0.718182 },
+      { team: "attack", number: 15, xPercent: 0.700000, yPercent: 0.763636 },
+      // Defence lineout mirror (y=65 / backline y=55)
+      { team: "defense", number: 2, xPercent: -0.028571, yPercent: 0.536364 },
+      { team: "defense", number: 1, xPercent: 0.057143, yPercent: 0.536364 },
+      { team: "defense", number: 4, xPercent: 0.114286, yPercent: 0.536364 },
+      { team: "defense", number: 6, xPercent: 0.171429, yPercent: 0.536364 },
+      { team: "defense", number: 5, xPercent: 0.228571, yPercent: 0.536364 },
+      { team: "defense", number: 7, xPercent: 0.285714, yPercent: 0.536364 },
+      { team: "defense", number: 3, xPercent: 0.342857, yPercent: 0.536364 },
+      { team: "defense", number: 8, xPercent: 0.371429, yPercent: 0.509091 },
+      { team: "defense", number: 9, xPercent: 0.371429, yPercent: 0.481818 },
+      { team: "defense", number: 10, xPercent: 0.428571, yPercent: 0.445455 },
+      { team: "defense", number: 12, xPercent: 0.542857, yPercent: 0.445455 },
+      { team: "defense", number: 13, xPercent: 0.657143, yPercent: 0.445455 },
+      { team: "defense", number: 14, xPercent: 0.828571, yPercent: 0.445455 },
+      { team: "defense", number: 11, xPercent: 0.057143, yPercent: 0.409091 },
+      { team: "defense", number: 15, xPercent: 0.700000, yPercent: 0.363636 },
+    ])
+  }, [applyFormationBatch])
+
+  const handleApplyKickoffFormation = useCallback(() => {
+    applyFormationBatch([
+      // Attack kick-off receive (bottom half)
+      { team: "attack", number: 1, xPercent: 0.171429, yPercent: 0.636364 },
+      { team: "attack", number: 2, xPercent: 0.257143, yPercent: 0.636364 },
+      { team: "attack", number: 3, xPercent: 0.342857, yPercent: 0.636364 },
+      { team: "attack", number: 4, xPercent: 0.428571, yPercent: 0.636364 },
+      { team: "attack", number: 5, xPercent: 0.571429, yPercent: 0.636364 },
+      { team: "attack", number: 6, xPercent: 0.657143, yPercent: 0.636364 },
+      { team: "attack", number: 7, xPercent: 0.742857, yPercent: 0.636364 },
+      { team: "attack", number: 8, xPercent: 0.500000, yPercent: 0.681818 },
+      { team: "attack", number: 9, xPercent: 0.400000, yPercent: 0.681818 },
+      { team: "attack", number: 10, xPercent: 0.342857, yPercent: 0.718182 },
+      { team: "attack", number: 11, xPercent: 0.085714, yPercent: 0.636364 },
+      { team: "attack", number: 12, xPercent: 0.457143, yPercent: 0.718182 },
+      { team: "attack", number: 13, xPercent: 0.571429, yPercent: 0.718182 },
+      { team: "attack", number: 14, xPercent: 0.885714, yPercent: 0.636364 },
+      { team: "attack", number: 15, xPercent: 0.500000, yPercent: 0.763636 },
+      // Defence kick-off chase (top half)
+      { team: "defense", number: 1, xPercent: 0.257143, yPercent: 0.500000 },
+      { team: "defense", number: 2, xPercent: 0.342857, yPercent: 0.500000 },
+      { team: "defense", number: 3, xPercent: 0.428571, yPercent: 0.500000 },
+      { team: "defense", number: 4, xPercent: 0.500000, yPercent: 0.500000 },
+      { team: "defense", number: 5, xPercent: 0.571429, yPercent: 0.500000 },
+      { team: "defense", number: 6, xPercent: 0.200000, yPercent: 0.500000 },
+      { team: "defense", number: 7, xPercent: 0.800000, yPercent: 0.500000 },
+      { team: "defense", number: 8, xPercent: 0.657143, yPercent: 0.500000 },
+      { team: "defense", number: 9, xPercent: 0.457143, yPercent: 0.472727 },
+      { team: "defense", number: 10, xPercent: 0.500000, yPercent: 0.445455 },
+      { team: "defense", number: 11, xPercent: 0.114286, yPercent: 0.472727 },
+      { team: "defense", number: 12, xPercent: 0.542857, yPercent: 0.472727 },
+      { team: "defense", number: 13, xPercent: 0.628571, yPercent: 0.472727 },
+      { team: "defense", number: 14, xPercent: 0.857143, yPercent: 0.472727 },
+      { team: "defense", number: 15, xPercent: 0.500000, yPercent: 0.418182 },
     ])
   }, [applyFormationBatch])
 
@@ -1343,6 +1380,7 @@ export function PlaybookDesigner() {
         onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
         onApplyLineoutFormation={handleApplyLineoutFormation}
         onApplyScrumFormation={handleApplyScrumFormation}
+        onApplyKickoffFormation={handleApplyKickoffFormation}
         onGenerateNotes={handleGenerateNotes}
       />
       )}

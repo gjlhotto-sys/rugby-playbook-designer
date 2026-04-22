@@ -41,6 +41,7 @@ interface PlaybookSidebarProps {
   onApplyBothTeamsFormation: () => void
   onApplyLineoutFormation: () => void
   onApplyScrumFormation: () => void
+  onApplyKickoffFormation: () => void
   onGenerateNotes: () => void
 }
 
@@ -191,6 +192,7 @@ export function PlaybookSidebar({
   onApplyBothTeamsFormation,
   onApplyLineoutFormation,
   onApplyScrumFormation,
+  onApplyKickoffFormation,
   onGenerateNotes,
 }: PlaybookSidebarProps) {
   const [attackArrowPickerOpen, setAttackArrowPickerOpen] = useState(false)
@@ -471,6 +473,9 @@ export function PlaybookSidebar({
           </Button>
           <Button onClick={onApplyScrumFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
             Scrum
+          </Button>
+          <Button onClick={onApplyKickoffFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
+            ⚽ Kick-off
           </Button>
         </div>
       </div>
