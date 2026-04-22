@@ -945,7 +945,7 @@ export function PlaybookDesigner() {
     }
   }, [])
 
-  const handleTeamColorChange = useCallback((team: "attack" | "defense", color: string) => {
+  const handleTeamColorChange = useCallback((team: "attack" | "defense" | "attackArrow" | "defenceArrow", color: string) => {
     setTeamColors(prev => ({ ...prev, [team]: color }))
   }, [])
 

@@ -1378,9 +1378,14 @@ export function RugbyField({
     setContextMenu(prev => ({ ...prev, visible: false }))
   }, [contextMenu, onClearPlayerArrows, onClearBallArrows])
 
-  const getTeamColor = (team: "attack" | "defense" | "ball") => {
-    if (team === "ball") return "#EAB308"
+  const getPlayerTokenColor = (team: "attack" | "defense") => {
     return team === "attack" ? teamColors.attack : teamColors.defense
+  }
+
+  const getArrowColor = (team: "attack" | "defense" | "ball") => {
+    if (team === "ball") return "#EAB308"
+    if (team === "attack") return teamColors.attackArrow ?? teamColors.attack
+    return teamColors.defenceArrow ?? teamColors.defense
   }
 
   // Generate grass stripe pattern (vertical stripes)
@@ -1419,7 +1424,7 @@ export function RugbyField({
     const visualStart = getArrowVisualStart(arrow)
     const fromX = visualStart.x
     const fromY = visualStart.y
-    const color = arrow.arrowType === "pass" ? "#EAB308" : arrow.arrowType === "kick" ? "#F97316" : getTeamColor(arrow.team)
+    const color = arrow.arrowType === "pass" ? "#EAB308" : arrow.arrowType === "kick" ? "#F97316" : getArrowColor(arrow.team)
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - fromX
     const dy = arrow.toY - fromY
@@ -1703,7 +1708,7 @@ export function RugbyField({
       .sort((a, b) => ((a as SequencedArrow).timestamp ?? 0) - ((b as SequencedArrow).timestamp ?? 0))
       .pop()
     : null
-  const selectedPlayerChainColor = selectedPlayerForRunChain ? getTeamColor(selectedPlayerForRunChain.team) : "#ffffff"
+  const selectedPlayerChainColor = selectedPlayerForRunChain ? getPlayerTokenColor(selectedPlayerForRunChain.team) : "#ffffff"
   const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && !!selectedPlayerLastRunArrow
 
   return (
@@ -1979,7 +1984,7 @@ export function RugbyField({
           >
             <circle
               r="1.6"
-              fill={getTeamColor(player.team)}
+              fill={getPlayerTokenColor(player.team)}
               stroke={selectedPlayerId === player.id ? "#ffffff" : "rgba(0,0,0,0.3)"}
               strokeWidth={selectedPlayerId === player.id ? "0.3" : "0.1"}
               className="transition-all"
@@ -2092,22 +2097,33 @@ export function RugbyField({
         ))}
 
         {/* Legend at bottom of field */}
-        <g transform={`translate(${BUFFER + 2}, ${CANVAS_HEIGHT - 4})`}>
-          <rect x="-1" y="-2" width="68" height="3.5" rx="0.5" fill="rgba(0,0,0,0.5)" />
-          {ARROW_TYPES.slice(0, 4).map((at, i) => (
-            <g key={at.type} transform={`translate(${i * 17}, 0)`}>
-              <text x="0" y="0.5" fontSize="1" fill="white" className="select-none">{at.label}</text>
+        <g transform={`translate(${BUFFER}, ${CANVAS_HEIGHT - 5})`}>
+          <rect x="0" y="-2" width="70" height="4.5" rx="0.5" fill="rgba(0,0,0,0.6)" />
+          
+          {/* Arrow type indicators with small visual lines */}
+          {[
+            { label: "Run", x: 1, dash: "none", color: "teamAttack" },
+            { label: "Decoy", x: 12, dash: "1,0.5", color: "teamAttack" },
+            { label: "Curve", x: 23, dash: "none", color: "teamAttack", curved: true },
+            { label: "Z-Cut", x: 34, dash: "none", color: "teamAttack", zcut: true },
+            { label: "Pass", x: 45, dash: "1,0.5", color: "#EAB308" },
+            { label: "Kick", x: 56, dash: "2,1", color: "#F97316", curved: true },
+          ].map(item => (
+            <g key={item.label} transform={`translate(${item.x}, 0)`}>
+              {/* Small line preview */}
+              <line x1="0" y1="0.3" x2="5" y2="0.3" 
+                stroke={item.color === "teamAttack" ? (teamColors.attackArrow ?? teamColors.attack) : item.color}
+                strokeWidth="0.5"
+                strokeDasharray={item.dash === "none" ? undefined : item.dash}
+              />
+              {/* Arrowhead */}
+              <polygon points="4.2,0 5.5,0.3 4.2,0.6" 
+                fill={item.color === "teamAttack" ? (teamColors.attackArrow ?? teamColors.attack) : item.color} />
+              {/* Label */}
+              <text x="0" y="2" fontSize="1.1" fill="white" opacity="0.8"
+                className="select-none">{item.label}</text>
             </g>
           ))}
-          {ARROW_TYPES.slice(4).map((at, i) => (
-            <g key={at.type} transform={`translate(${i * 17}, 1.5)`}>
-              <text x="0" y="0.5" fontSize="1" fill="white" className="select-none">{at.label}</text>
-            </g>
-          ))}
-          <g transform="translate(55, -0.55)">
-            <path d="M 0 0.4 C 1.1 -0.4 1.7 1.2 2.8 0.4" fill="none" stroke="#F97316" strokeWidth="0.35" strokeDasharray="1.2 0.6" />
-            <text x="3.3" y="0.7" fontSize="1" fill="white" className="select-none">Kick</text>
-          </g>
         </g>
       </svg>
       

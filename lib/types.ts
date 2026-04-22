@@ -59,6 +59,8 @@ export type InteractionMode = "move" | "draw" | "text"
 export interface TeamColors {
   attack: string
   defense: string
+  attackArrow?: string
+  defenceArrow?: string
 }
 
 export type PlayType = "Lineout" | "Scrum" | "Backline Move" | "Kick-off" | "Restart" | "Penalty" | "Free Play"

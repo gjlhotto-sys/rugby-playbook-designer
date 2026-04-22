@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, Save, Copy } from "lucide-react"
@@ -26,7 +27,7 @@ interface PlaybookSidebarProps {
   cones: ConeMarker[]
   teamColors: TeamColors
   savedPlays: SavedPlay[]
-  onTeamColorChange: (team: "attack" | "defense", color: string) => void
+  onTeamColorChange: (team: "attack" | "defense" | "attackArrow" | "defenceArrow", color: string) => void
   onClearField: () => void
   onSavePlay: () => void
   onLoadPlay: (play: SavedPlay) => void
@@ -192,9 +193,60 @@ export function PlaybookSidebar({
   onApplyScrumFormation,
   onGenerateNotes,
 }: PlaybookSidebarProps) {
+  const [attackArrowPickerOpen, setAttackArrowPickerOpen] = useState(false)
+  const [defenceArrowPickerOpen, setDefenceArrowPickerOpen] = useState(false)
+  const [tempAttackArrowColor, setTempAttackArrowColor] = useState(teamColors.attackArrow ?? teamColors.attack)
+  const [tempDefenceArrowColor, setTempDefenceArrowColor] = useState(teamColors.defenceArrow ?? teamColors.defense)
+  const [arrowColorWarning, setArrowColorWarning] = useState<string | null>(null)
   const attackOnField = fieldPlayers.filter(p => p.team === "attack").length
   const defenseOnField = fieldPlayers.filter(p => p.team === "defense").length
   const hasContent = fieldPlayers.length > 0 || ball !== null || cones.length > 0
+
+  const getHue = (hex: string) => {
+    const r = Number.parseInt(hex.slice(1, 3), 16) / 255
+    const g = Number.parseInt(hex.slice(3, 5), 16) / 255
+    const b = Number.parseInt(hex.slice(5, 7), 16) / 255
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const d = max - min
+    if (d === 0) return 0
+    let h = 0
+    if (max === r) h = ((g - b) / d) % 6
+    else if (max === g) h = (b - r) / d + 2
+    else h = (r - g) / d + 4
+    const hue = h * 60
+    return hue < 0 ? hue + 360 : hue
+  }
+
+  const hueDistance = (a: number, b: number) => {
+    const raw = Math.abs(a - b)
+    return Math.min(raw, 360 - raw)
+  }
+
+  const isReservedArrowColor = (color: string) => {
+    const hue = getHue(color.toLowerCase())
+    const yellowHue = getHue("#EAB308")
+    const orangeHue = getHue("#F97316")
+
+    if (hueDistance(hue, yellowHue) <= 20) {
+      return "Yellow is reserved for passes"
+    }
+    if (hueDistance(hue, orangeHue) <= 20) {
+      return "Orange is reserved for kicks"
+    }
+    return null
+  }
+
+  const applyArrowColor = (team: "attackArrow" | "defenceArrow", color: string, close: () => void) => {
+    const warning = isReservedArrowColor(color)
+    if (warning) {
+      setArrowColorWarning(warning)
+      return
+    }
+    setArrowColorWarning(null)
+    onTeamColorChange(team, color)
+    close()
+  }
 
   return (
     <aside className="w-[160px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
@@ -274,6 +326,94 @@ export function PlaybookSidebar({
             onChange={(e) => onTeamColorChange("defense", e.target.value)}
             className="w-5 h-5 rounded cursor-pointer border-0 bg-transparent"
           />
+        </div>
+        <div className="relative">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[8px] text-muted-foreground">Attack Arrow Color</span>
+            <button
+              className="w-5 h-5 rounded border border-border"
+              style={{ background: teamColors.attackArrow ?? teamColors.attack }}
+              onClick={() => {
+                setTempAttackArrowColor(teamColors.attackArrow ?? teamColors.attack)
+                setArrowColorWarning(null)
+                setAttackArrowPickerOpen(true)
+              }}
+            />
+          </div>
+          {attackArrowPickerOpen && (
+            <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-md p-2 shadow-lg min-w-[120px]">
+              <input
+                type="color"
+                value={tempAttackArrowColor}
+                onChange={(e) => setTempAttackArrowColor(e.target.value)}
+                className="w-full h-8 cursor-pointer rounded"
+              />
+              <div className="mt-1 text-[8px] text-muted-foreground flex items-center gap-1">
+                <span>Preview</span>
+                <span className="inline-block w-3 h-3 rounded border border-border" style={{ background: tempAttackArrowColor }} />
+              </div>
+              {arrowColorWarning && (
+                <div className="text-[8px] text-amber-400 mt-1">{arrowColorWarning}</div>
+              )}
+              <div className="flex gap-1 mt-2">
+                <button
+                  className="flex-1 text-[10px] py-1 bg-primary text-primary-foreground rounded"
+                  onClick={() => applyArrowColor("attackArrow", tempAttackArrowColor, () => setAttackArrowPickerOpen(false))}
+                >Apply</button>
+                <button
+                  className="flex-1 text-[10px] py-1 bg-muted rounded"
+                  onClick={() => {
+                    setArrowColorWarning(null)
+                    setAttackArrowPickerOpen(false)
+                  }}
+                >Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="relative">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[8px] text-muted-foreground">Defence Arrow Color</span>
+            <button
+              className="w-5 h-5 rounded border border-border"
+              style={{ background: teamColors.defenceArrow ?? teamColors.defense }}
+              onClick={() => {
+                setTempDefenceArrowColor(teamColors.defenceArrow ?? teamColors.defense)
+                setArrowColorWarning(null)
+                setDefenceArrowPickerOpen(true)
+              }}
+            />
+          </div>
+          {defenceArrowPickerOpen && (
+            <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-md p-2 shadow-lg min-w-[120px]">
+              <input
+                type="color"
+                value={tempDefenceArrowColor}
+                onChange={(e) => setTempDefenceArrowColor(e.target.value)}
+                className="w-full h-8 cursor-pointer rounded"
+              />
+              <div className="mt-1 text-[8px] text-muted-foreground flex items-center gap-1">
+                <span>Preview</span>
+                <span className="inline-block w-3 h-3 rounded border border-border" style={{ background: tempDefenceArrowColor }} />
+              </div>
+              {arrowColorWarning && (
+                <div className="text-[8px] text-amber-400 mt-1">{arrowColorWarning}</div>
+              )}
+              <div className="flex gap-1 mt-2">
+                <button
+                  className="flex-1 text-[10px] py-1 bg-primary text-primary-foreground rounded"
+                  onClick={() => applyArrowColor("defenceArrow", tempDefenceArrowColor, () => setDefenceArrowPickerOpen(false))}
+                >Apply</button>
+                <button
+                  className="flex-1 text-[10px] py-1 bg-muted rounded"
+                  onClick={() => {
+                    setArrowColorWarning(null)
+                    setDefenceArrowPickerOpen(false)
+                  }}
+                >Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
