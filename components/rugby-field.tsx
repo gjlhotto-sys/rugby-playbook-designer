@@ -289,7 +289,14 @@ export function RugbyField({
     )
 
     if (receiverRunArrow) {
-      return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+      const passTime = (passArrow as SequencedArrow).timestamp ?? 0
+      const runTime = (receiverRunArrow as SequencedArrow).timestamp ?? 0
+
+      if (passTime > runTime) {
+        return { x: receiverRunArrow.toX, y: receiverRunArrow.toY }
+      } else {
+        return animatedPositionsRef.current[receiver.id] ?? { x: receiver.x, y: receiver.y }
+      }
     }
 
     return animatedPositionsRef.current[receiver.id] ?? { x: receiver.x, y: receiver.y }
