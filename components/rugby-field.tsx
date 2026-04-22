@@ -129,6 +129,16 @@ export function RugbyField({
   animationSpeed = 1,
 }: RugbyFieldProps) {
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
+  type KickCurve = {
+    fromX: number
+    fromY: number
+    cp1x: number
+    cp1y: number
+    cp2x: number
+    cp2y: number
+    toX: number
+    toY: number
+  }
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingRef = useRef<{ type: "player" | "ball" | "phase" | "cone" | "label" | "arrow-start" | "arrow-mid" | "arrow-end"; id: string; offsetX: number; offsetY: number } | null>(null)
@@ -159,6 +169,7 @@ export function RugbyField({
   const nextGroupStarted = useRef(false)
   const overlapAnimationFrameRef = useRef<number | null>(null)
   const overlappedGroupIndexRef = useRef<number | null>(null)
+  const kickCurveRef = useRef<KickCurve | null>(null)
   const pendingPassSnapRef = useRef<{
     passerId: string
     receiverId: string
@@ -206,6 +217,48 @@ export function RugbyField({
     return player ? { x: player.x, y: player.y } : null
   }, [players])
 
+  const getKickCurve = useCallback((fromX: number, fromY: number, toX: number, toY: number) => {
+    const dx = toX - fromX
+    const dy = toY - fromY
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    const safeDist = Math.max(dist, 0.001)
+    
+    // Use a consistent upward lift in SVG space (negative Y = up on screen)
+    // This makes the kick arc go "up" visually regardless of direction
+    const lift = Math.min(dist * 0.4, 15)
+    
+    // Always arc upward on screen (negative Y direction in SVG)
+    // For kicks going mostly horizontal, arc goes up
+    // For kicks going mostly vertical, arc goes to the side
+    const perpX = (-dy / safeDist) * lift
+    const perpY = (-Math.abs(dx) / safeDist) * lift
+
+    const cp1x = fromX + dx * 0.25 + perpX
+    const cp1y = fromY + dy * 0.25 + perpY
+    const cp2x = fromX + dx * 0.75 + perpX
+    const cp2y = fromY + dy * 0.75 + perpY
+
+    return { fromX, fromY, cp1x, cp1y, cp2x, cp2y, toX, toY }
+  }, [])
+
+  const getBezierPoint = useCallback((
+    t: number,
+    fx: number,
+    fy: number,
+    cp1x: number,
+    cp1y: number,
+    cp2x: number,
+    cp2y: number,
+    tx: number,
+    ty: number
+  ) => {
+    const mt = 1 - t
+    return {
+      x: mt * mt * mt * fx + 3 * mt * mt * t * cp1x + 3 * mt * t * t * cp2x + t * t * t * tx,
+      y: mt * mt * mt * fy + 3 * mt * mt * t * cp1y + 3 * mt * t * t * cp2y + t * t * t * ty,
+    }
+  }, [])
+
   const animateGroupTick = useCallback((
     timestamp: number,
     groupStarts: Record<string, { x: number; y: number }>,
@@ -225,9 +278,24 @@ export function RugbyField({
       const start = groupStarts[id]
       const target = groupTargets[id]
       if (start && target) {
-        newPositions[id] = {
-          x: start.x + (target.x - start.x) * progress,
-          y: start.y + (target.y - start.y) * progress,
+        if (id === "ball" && kickCurveRef.current) {
+          const p = getBezierPoint(
+            rawProgress,
+            kickCurveRef.current.fromX,
+            kickCurveRef.current.fromY,
+            kickCurveRef.current.cp1x,
+            kickCurveRef.current.cp1y,
+            kickCurveRef.current.cp2x,
+            kickCurveRef.current.cp2y,
+            kickCurveRef.current.toX,
+            kickCurveRef.current.toY
+          )
+          newPositions[id] = p
+        } else {
+          newPositions[id] = {
+            x: start.x + (target.x - start.x) * progress,
+            y: start.y + (target.y - start.y) * progress,
+          }
         }
       }
     })
@@ -243,7 +311,7 @@ export function RugbyField({
     } else {
       onComplete()
     }
-  }, [])
+  }, [getBezierPoint])
 
   const clearGroupTimeout = useCallback(() => {
     if (groupTimeoutRef.current !== null) {
@@ -307,6 +375,7 @@ export function RugbyField({
     const starts: Record<string, { x: number; y: number }> = {}
     const targets: Record<string, { x: number; y: number }> = {}
     let hasPassInGroup = false
+    let kickCurve: KickCurve | null = null
 
     group.forEach((arrow) => {
       const player = players.find((p) =>
@@ -324,6 +393,16 @@ export function RugbyField({
         targets.ball = getPassTarget(arrow)
         return
       }
+      if (arrow.arrowType === "kick") {
+        hasPassInGroup = true
+        const kickerPos = player ? getPlayerCurrentPos(player.id) : null
+        const from = animatedPositionsRef.current.ball ?? kickerPos ?? { x: arrow.fromX, y: arrow.fromY }
+        const to = { x: arrow.toX, y: arrow.toY }
+        starts.ball = from
+        targets.ball = to
+        kickCurve = getKickCurve(from.x, from.y, to.x, to.y)
+        return
+      }
 
       if (player) {
         const playerStart = getPlayerCurrentPos(player.id)
@@ -334,11 +413,12 @@ export function RugbyField({
       }
     })
 
-    return { starts, targets, hasPassInGroup }
-  }, [players, getPlayerCurrentPos, getPassTarget])
+    return { starts, targets, hasPassInGroup, kickCurve }
+  }, [players, getPlayerCurrentPos, getPassTarget, getKickCurve])
 
   const prepareNextGroup = useCallback((group: SequencedArrow[], groupIndex: number) => {
-    const { starts, targets, hasPassInGroup } = buildGroupMotion(group)
+    const { starts, targets, hasPassInGroup, kickCurve } = buildGroupMotion(group)
+    kickCurveRef.current = kickCurve
     const groupStartTime = performance.now()
     overlappedGroupIndexRef.current = groupIndex
 
@@ -354,9 +434,25 @@ export function RugbyField({
         const start = starts[id]
         const target = targets[id]
         if (start && target) {
-          newPositions[id] = {
-            x: start.x + (target.x - start.x) * progress,
-            y: start.y + (target.y - start.y) * progress,
+          const activeKickCurve = kickCurveRef.current
+          if (id === "ball" && activeKickCurve) {
+            const p = getBezierPoint(
+              rawProgress,
+              activeKickCurve.fromX,
+              activeKickCurve.fromY,
+              activeKickCurve.cp1x,
+              activeKickCurve.cp1y,
+              activeKickCurve.cp2x,
+              activeKickCurve.cp2y,
+              activeKickCurve.toX,
+              activeKickCurve.toY
+            )
+            newPositions[id] = p
+          } else {
+            newPositions[id] = {
+              x: start.x + (target.x - start.x) * progress,
+              y: start.y + (target.y - start.y) * progress,
+            }
           }
         }
       })
@@ -373,13 +469,14 @@ export function RugbyField({
         if (hasPassInGroup && targets.ball) {
           if (ball) onBallDrag(targets.ball.x, targets.ball.y)
           delete animatedPositionsRef.current.ball
+          kickCurveRef.current = null
         }
         setAnimatedPositions({ ...animatedPositionsRef.current })
       }
     }
 
     overlapAnimationFrameRef.current = requestAnimationFrame(parallelTick)
-  }, [buildGroupMotion, ball, onBallDrag])
+  }, [buildGroupMotion, ball, onBallDrag, getBezierPoint])
 
   const playNextGroup = useCallback(() => {
     const groups = animationGroupsRef.current
@@ -393,7 +490,8 @@ export function RugbyField({
 
     nextGroupStarted.current = false
     const currentGroup = groups[groupIndex]
-    const { starts: groupStarts, targets: groupTargets, hasPassInGroup } = buildGroupMotion(currentGroup)
+    const { starts: groupStarts, targets: groupTargets, hasPassInGroup, kickCurve } = buildGroupMotion(currentGroup)
+    kickCurveRef.current = kickCurve
     startPositionsRef.current = { ...startPositionsRef.current, ...groupStarts }
     targetPositionsRef.current = groupTargets
     animationStartTimeRef.current = performance.now()
@@ -409,6 +507,7 @@ export function RugbyField({
             onBallDrag(groupTargets.ball.x, groupTargets.ball.y)
           }
           delete animatedPositionsRef.current.ball
+          kickCurveRef.current = null
         }
         setAnimatedPositions({ ...animatedPositionsRef.current })
         currentGroupRef.current += 1
@@ -542,6 +641,7 @@ export function RugbyField({
     nextGroupStarted.current = false
     overlappedGroupIndexRef.current = null
     animationGroupsRef.current = []
+    kickCurveRef.current = null
   }, [clearGroupTimeout])
 
   useEffect(() => {
@@ -555,6 +655,7 @@ export function RugbyField({
       if (groupTimeoutRef.current !== null) {
         window.clearTimeout(groupTimeoutRef.current)
       }
+      kickCurveRef.current = null
     }
   }, [])
 
@@ -1228,7 +1329,7 @@ export function RugbyField({
 
   // Render arrow based on type
   const renderArrow = (arrow: Arrow) => {
-    const color = arrow.arrowType === "pass" ? "#EAB308" : getTeamColor(arrow.team)
+    const color = arrow.arrowType === "pass" ? "#EAB308" : arrow.arrowType === "kick" ? "#F97316" : getTeamColor(arrow.team)
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - arrow.fromX
     const dy = arrow.toY - arrow.fromY
@@ -1410,6 +1511,38 @@ export function RugbyField({
             />
             <line x1={endX - tickX} y1={endY - tickY} x2={endX + tickX} y2={endY + tickY}
               stroke={color} strokeWidth={strokeWidth} />
+          </g>
+        )
+        break
+      }
+      case "kick": {
+        const kickCurve = getKickCurve(arrow.fromX, arrow.fromY, arrow.toX, arrow.toY)
+        const { cp1x, cp1y, cp2x, cp2y } = kickCurve
+        const bezierMid = getBezierPoint(0.5, arrow.fromX, arrow.fromY, cp1x, cp1y, cp2x, cp2y, arrow.toX, arrow.toY)
+        const angle = (Math.atan2(arrow.toY - arrow.fromY, arrow.toX - arrow.fromX) * 180) / Math.PI
+        pathElement = (
+          <g key={arrow.id}>
+            <defs>
+              <marker id={markerId} markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#F97316" />
+              </marker>
+            </defs>
+            <path
+              d={`M ${arrow.fromX} ${arrow.fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${arrow.toX} ${arrow.toY}`}
+              fill="none" stroke="#F97316" strokeWidth={isSelected ? "0.9" : "0.8"} strokeDasharray="8 4" markerEnd={`url(#${markerId})`}
+              style={{ filter: glowFilter }}
+              className="arrow-path cursor-pointer"
+              onClick={(e) => handleArrowClick(e, arrow)}
+            />
+            <ellipse
+              cx={bezierMid.x}
+              cy={bezierMid.y}
+              rx="0.9"
+              ry="0.55"
+              fill="#F97316"
+              transform={`rotate(${angle} ${bezierMid.x} ${bezierMid.y})`}
+              className="pointer-events-none"
+            />
           </g>
         )
         break
@@ -1842,6 +1975,10 @@ export function RugbyField({
               <text x="0" y="0.5" fontSize="1" fill="white" className="select-none">{at.label}</text>
             </g>
           ))}
+          <g transform="translate(55, -0.55)">
+            <path d="M 0 0.4 C 1.1 -0.4 1.7 1.2 2.8 0.4" fill="none" stroke="#F97316" strokeWidth="0.35" strokeDasharray="1.2 0.6" />
+            <text x="3.3" y="0.7" fontSize="1" fill="white" className="select-none">Kick</text>
+          </g>
         </g>
       </svg>
       

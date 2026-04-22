@@ -1049,7 +1049,7 @@ export function PlaybookDesigner() {
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
               >
                 <span className="w-3 h-3 flex items-center justify-center text-[8px]">
-                  {arrowType === "pass" ? "🟡" : "→"}
+                  {arrowType === "pass" ? "🟡" : arrowType === "kick" ? "🏉" : "→"}
                 </span>
                 {selectedArrowType?.label}
                 <ChevronDown className="w-3 h-3" />
@@ -1073,6 +1073,7 @@ export function PlaybookDesigner() {
                     >
                       <span className="w-4 text-center">
                         {at.type === "pass" ? "🟡" : 
+                         at.type === "kick" ? "🏉" :
                          at.type === "decoy" ? "⋯→" :
                          at.type === "curve" ? "↪" :
                          at.type === "z-left" ? "↙" :
