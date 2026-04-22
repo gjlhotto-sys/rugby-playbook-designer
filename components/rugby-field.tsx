@@ -176,6 +176,10 @@ export function RugbyField({
     start: { x: number; y: number }
     target: { x: number; y: number }
   } | null>(null)
+  const pendingRunSnapRef = useRef<{
+    playerId: string
+    start: { x: number; y: number }
+  } | null>(null)
   const [hoverPassEndpoint, setHoverPassEndpoint] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -723,8 +727,38 @@ export function RugbyField({
       return
     }
     
+    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick") {
+      const snapToRunEndpoint = (playerId: string, clickX: number, clickY: number) => {
+        const normalizedPlayerId = playerId.replace("attack-", "")
+        const playerRunArrows = arrows.filter((a) =>
+          (a.playerId === playerId ||
+            a.playerId === normalizedPlayerId ||
+            playerId === a.playerId.replace("attack-", "")) &&
+          a.arrowType !== "pass" &&
+          a.arrowType !== "kick"
+        )
+
+        if (playerRunArrows.length === 0) return null
+
+        const sortedRuns = [...playerRunArrows].sort(
+          (a, b) => ((a as SequencedArrow).timestamp ?? 0) - ((b as SequencedArrow).timestamp ?? 0)
+        )
+        const lastRun = sortedRuns[sortedRuns.length - 1]
+        const endpointDist = Math.hypot(clickX - lastRun.toX, clickY - lastRun.toY)
+        if (endpointDist <= 5) {
+          return { x: lastRun.toX, y: lastRun.toY }
+        }
+        return null
+      }
+
+      const snapStart = snapToRunEndpoint(selectedPlayerId, x, y)
+      if (snapStart) {
+        pendingRunSnapRef.current = { playerId: selectedPlayerId, start: snapStart }
+      }
+    }
+
     onFieldClick(x, y)
-  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect])
+  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect, selectedPlayerId, arrows])
 
   const tryCreatePassToPoint = useCallback((toX: number, toY: number, receiverIdForArrow: string) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return false
@@ -1050,6 +1084,32 @@ export function RugbyField({
     pendingPassSnapRef.current = null
   }, [arrows, onArrowUpdate])
 
+  useEffect(() => {
+    const pending = pendingRunSnapRef.current
+    if (!pending) return
+
+    const latestRunArrow = [...arrows]
+      .reverse()
+      .find((a) =>
+        a.arrowType !== "pass" &&
+        a.arrowType !== "kick" &&
+        (a.playerId === pending.playerId ||
+          a.playerId === pending.playerId.replace("attack-", "") ||
+          pending.playerId === a.playerId.replace("attack-", ""))
+      )
+
+    if (!latestRunArrow) return
+
+    if (
+      Math.abs(latestRunArrow.fromX - pending.start.x) > 0.001 ||
+      Math.abs(latestRunArrow.fromY - pending.start.y) > 0.001
+    ) {
+      onArrowUpdate(latestRunArrow.id, { fromX: pending.start.x, fromY: pending.start.y })
+    }
+
+    pendingRunSnapRef.current = null
+  }, [arrows, onArrowUpdate])
+
   const handleBallMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     if (e.button !== 0 || !ball) return
@@ -1329,17 +1389,47 @@ export function RugbyField({
 
   // Render arrow based on type
   const renderArrow = (arrow: Arrow) => {
+    const getArrowVisualStart = (currentArrow: Arrow) => {
+      if (currentArrow.arrowType === "pass" || currentArrow.arrowType === "kick") {
+        return { x: currentArrow.fromX, y: currentArrow.fromY }
+      }
+
+      const playerArrows = arrows
+        .filter((a) =>
+          a.id !== currentArrow.id &&
+          a.arrowType !== "pass" &&
+          a.arrowType !== "kick" &&
+          (a.playerId === currentArrow.playerId ||
+            a.playerId === currentArrow.playerId.replace("attack-", "") ||
+            currentArrow.playerId === a.playerId.replace("attack-", ""))
+        )
+        .sort((a, b) => ((a as SequencedArrow).timestamp ?? 0) - ((b as SequencedArrow).timestamp ?? 0))
+
+      const thisTime = (currentArrow as SequencedArrow).timestamp ?? 0
+      const predecessors = playerArrows.filter((a) => ((a as SequencedArrow).timestamp ?? 0) < thisTime)
+
+      if (predecessors.length > 0) {
+        const lastPredecessor = predecessors[predecessors.length - 1]
+        return { x: lastPredecessor.toX, y: lastPredecessor.toY }
+      }
+
+      return { x: currentArrow.fromX, y: currentArrow.fromY }
+    }
+
+    const visualStart = getArrowVisualStart(arrow)
+    const fromX = visualStart.x
+    const fromY = visualStart.y
     const color = arrow.arrowType === "pass" ? "#EAB308" : arrow.arrowType === "kick" ? "#F97316" : getTeamColor(arrow.team)
     const markerId = `arrowhead-${arrow.id}`
-    const dx = arrow.toX - arrow.fromX
-    const dy = arrow.toY - arrow.fromY
+    const dx = arrow.toX - fromX
+    const dy = arrow.toY - fromY
     const dist = Math.sqrt(dx * dx + dy * dy)
     const isSelected = selectedArrowId === arrow.id
     const strokeWidth = isSelected ? "0.7" : "0.5"
     const glowFilter = isSelected ? "drop-shadow(0 0 2px rgba(255,255,255,0.8))" : undefined
     
-    const midX = (arrow.fromX + arrow.toX) / 2
-    const midY = (arrow.fromY + arrow.toY) / 2
+    const midX = (fromX + arrow.toX) / 2
+    const midY = (fromY + arrow.toY) / 2
     
     let pathElement: React.ReactNode = null
     
@@ -1353,7 +1443,7 @@ export function RugbyField({
               </marker>
             </defs>
             <line 
-              x1={arrow.fromX} y1={arrow.fromY} x2={arrow.toX} y2={arrow.toY}
+              x1={fromX} y1={fromY} x2={arrow.toX} y2={arrow.toY}
               stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`} 
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1371,7 +1461,7 @@ export function RugbyField({
               </marker>
             </defs>
             <line 
-              x1={arrow.fromX} y1={arrow.fromY} x2={arrow.toX} y2={arrow.toY}
+              x1={fromX} y1={fromY} x2={arrow.toX} y2={arrow.toY}
               stroke={color} strokeWidth={strokeWidth} strokeDasharray="1,0.5" markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1395,7 +1485,7 @@ export function RugbyField({
               </marker>
             </defs>
             <path 
-              d={`M ${arrow.fromX} ${arrow.fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
+              d={`M ${fromX} ${fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1419,7 +1509,7 @@ export function RugbyField({
               </marker>
             </defs>
             <path 
-              d={`M ${arrow.fromX} ${arrow.fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
+              d={`M ${fromX} ${fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke="#EAB308" strokeWidth={strokeWidth} strokeDasharray="1,0.5" markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1430,8 +1520,8 @@ export function RugbyField({
         break
       }
       case "z-left": {
-        const zMidX = arrow.fromX + dx * 0.5
-        const zMidY = arrow.fromY + dy * 0.5
+        const zMidX = fromX + dx * 0.5
+        const zMidY = fromY + dy * 0.5
         const offsetX = -3
         pathElement = (
           <g key={arrow.id}>
@@ -1441,7 +1531,7 @@ export function RugbyField({
               </marker>
             </defs>
             <path 
-              d={`M ${arrow.fromX} ${arrow.fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
+              d={`M ${fromX} ${fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1452,8 +1542,8 @@ export function RugbyField({
         break
       }
       case "z-right": {
-        const zMidX = arrow.fromX + dx * 0.5
-        const zMidY = arrow.fromY + dy * 0.5
+        const zMidX = fromX + dx * 0.5
+        const zMidY = fromY + dy * 0.5
         const offsetX = 3
         pathElement = (
           <g key={arrow.id}>
@@ -1463,7 +1553,7 @@ export function RugbyField({
               </marker>
             </defs>
             <path 
-              d={`M ${arrow.fromX} ${arrow.fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
+              d={`M ${fromX} ${fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1483,7 +1573,7 @@ export function RugbyField({
               </marker>
             </defs>
             <path 
-              d={`M ${arrow.fromX} ${arrow.fromY} A ${loopRadius} ${loopRadius} 0 1 0 ${midX} ${midY} L ${arrow.toX} ${arrow.toY}`}
+              d={`M ${fromX} ${fromY} A ${loopRadius} ${loopRadius} 0 1 0 ${midX} ${midY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
@@ -1496,14 +1586,14 @@ export function RugbyField({
       case "short": {
         const shortDist = Math.min(dist, 3)
         const ratio = shortDist / dist
-        const endX = arrow.fromX + dx * ratio
-        const endY = arrow.fromY + dy * ratio
+        const endX = fromX + dx * ratio
+        const endY = fromY + dy * ratio
         const tickX = -dy / dist * 0.8
         const tickY = dx / dist * 0.8
         pathElement = (
           <g key={arrow.id}>
             <line 
-              x1={arrow.fromX} y1={arrow.fromY} x2={endX} y2={endY}
+              x1={fromX} y1={fromY} x2={endX} y2={endY}
               stroke={color} strokeWidth={isSelected ? "0.8" : "0.6"}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
