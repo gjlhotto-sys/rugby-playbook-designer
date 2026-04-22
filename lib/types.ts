@@ -51,6 +51,7 @@ export interface Arrow {
   toX: number
   toY: number
   arrowType: ArrowType
+  receiverId?: string
 }
 
 export type InteractionMode = "move" | "draw" | "text"
