@@ -40,7 +40,7 @@ export interface TextLabel {
   y: number
 }
 
-export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short"
+export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short" | "kick"
 
 export interface Arrow {
   id: string
@@ -124,6 +124,7 @@ export const ARROW_TYPES: { type: ArrowType; label: string; description: string 
   { type: "z-right", label: "Z-Right", description: "Z-shape cut right" },
   { type: "loop", label: "Loop", description: "Looping run" },
   { type: "short", label: "Short", description: "Short gain with tick" },
+  { type: "kick", label: "Kick", description: "Kick down or cross field" },
 ]
 
 export const RUGBY_POSITIONS: PlayerTemplate[] = [
