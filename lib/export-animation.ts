@@ -2,6 +2,7 @@ export async function exportPlayAsGif(
   fieldElement: HTMLElement,
   duration: number,
   filename: string,
+  animationSpeed: number = 1,
   onProgress?: (progress: number) => void
 ): Promise<void> {
   const GIF = (await import('gif.js')).default
@@ -21,9 +22,12 @@ export async function exportPlayAsGif(
     workerScript: '/gif.worker.js',
   })
 
+  const adjustedDuration = duration * (1 / animationSpeed)
   const fps = 15
-  const totalFrames = Math.ceil((duration / 1000) * fps)
-  const frameDelay = Math.round(duration / totalFrames)
+  const totalFrames = Math.ceil((adjustedDuration / 1000) * fps)
+  const baseDuration = adjustedDuration
+  const frameDelay = Math.round((baseDuration / totalFrames) * 1.2)
+  const RENDER_BUFFER = 50 // ms for React to paint
 
   const captureFrame = (): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
@@ -85,7 +89,7 @@ export async function exportPlayAsGif(
         gif.addFrame(canvas, { delay: frameDelay, copy: true })
         frameCount++
         onProgress?.(frameCount / totalFrames)
-        setTimeout(captureNextFrame, frameDelay)
+        setTimeout(captureNextFrame, frameDelay + RENDER_BUFFER)
       } catch (err) {
         reject(err)
       }

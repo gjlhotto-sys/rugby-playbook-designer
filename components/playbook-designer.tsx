@@ -2,7 +2,9 @@
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import { RugbyField, type RugbyFieldHandle } from "./rugby-field"
-import { PlaybookSidebar, type SidebarPlacementToken } from "./playbook-sidebar"
+import { type SidebarPlacementToken } from "./playbook-sidebar"
+import { PlaybookLeftSidebar } from "./playbook-left-sidebar"
+import { PlaybookRightSidebar } from "./playbook-right-sidebar"
 import { Move, Pencil, Undo2, ChevronDown } from "lucide-react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
@@ -1081,6 +1083,7 @@ export function PlaybookDesigner() {
         fieldEl,
         animDuration,
         filename,
+        animationSpeed,
         (progress) => setExportVideoProgress(Math.round(progress * 100))
       )
 
@@ -1120,6 +1123,24 @@ export function PlaybookDesigner() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
+      {!isPresentationMode && (
+        <PlaybookLeftSidebar
+          attackPlayers={RUGBY_POSITIONS}
+          defensePlayers={RUGBY_POSITIONS}
+          fieldPlayers={fieldPlayers}
+          ball={ball}
+          cones={cones}
+          teamColors={teamColors}
+          selectedPlacementToken={selectedPlacementToken}
+          onSelectPlacementToken={setSelectedPlacementToken}
+          onApplyAttackFormation={handleApplyAttackFormation}
+          onApplyDefenseFormation={handleApplyDefenseFormation}
+          onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
+          onApplyLineoutFormation={handleApplyLineoutFormation}
+          onApplyScrumFormation={handleApplyScrumFormation}
+          onApplyKickoffFormation={handleApplyKickoffFormation}
+        />
+      )}
       {/* Main field area with toolbar */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Toolbar */}
@@ -1418,44 +1439,31 @@ export function PlaybookDesigner() {
 
       {/* Sidebar */}
       {!isPresentationMode && (
-      <PlaybookSidebar
-        playName={playName}
-        playType={playType}
-        notes={notes}
-        onPlayNameChange={setPlayName}
-        onPlayTypeChange={setPlayType}
-        onNotesChange={setNotes}
-        attackPlayers={RUGBY_POSITIONS}
-        defensePlayers={RUGBY_POSITIONS}
-        fieldPlayers={fieldPlayers}
-        ball={ball}
-        cones={cones}
-        teamColors={teamColors}
-        savedPlays={savedPlays}
-        onTeamColorChange={handleTeamColorChange}
-        onClearField={handleClearField}
-        onSavePlay={handleSavePlay}
-        onLoadPlay={handleLoadPlay}
-        onDeletePlay={handleDeletePlay}
-        onDuplicatePlay={handleDuplicatePlay}
-        onExportPDF={handleExportPDF}
-        onExportVideo={() => {
-          setExportFilename(playName || "tryline-play")
-          setShowExportModal(true)
-        }}
-        isExportingVideo={isExportingVideo}
-        exportVideoProgress={exportVideoProgress}
-        canExportVideo={arrows.length > 0 && !isPresentationMode}
-        selectedPlacementToken={selectedPlacementToken}
-        onSelectPlacementToken={setSelectedPlacementToken}
-        onApplyAttackFormation={handleApplyAttackFormation}
-        onApplyDefenseFormation={handleApplyDefenseFormation}
-        onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
-        onApplyLineoutFormation={handleApplyLineoutFormation}
-        onApplyScrumFormation={handleApplyScrumFormation}
-        onApplyKickoffFormation={handleApplyKickoffFormation}
-        onGenerateNotes={handleGenerateNotes}
-      />
+        <PlaybookRightSidebar
+          playName={playName}
+          playType={playType}
+          notes={notes}
+          onPlayNameChange={setPlayName}
+          onPlayTypeChange={setPlayType}
+          onNotesChange={setNotes}
+          fieldPlayers={fieldPlayers}
+          teamColors={teamColors}
+          savedPlays={savedPlays}
+          onTeamColorChange={handleTeamColorChange}
+          onSavePlay={handleSavePlay}
+          onLoadPlay={handleLoadPlay}
+          onDeletePlay={handleDeletePlay}
+          onDuplicatePlay={handleDuplicatePlay}
+          onExportPDF={handleExportPDF}
+          onExportVideo={() => {
+            setExportFilename(playName || "tryline-play")
+            setShowExportModal(true)
+          }}
+          isExportingVideo={isExportingVideo}
+          exportVideoProgress={exportVideoProgress}
+          canExportVideo={arrows.length > 0 && !isPresentationMode}
+          onGenerateNotes={handleGenerateNotes}
+        />
       )}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
