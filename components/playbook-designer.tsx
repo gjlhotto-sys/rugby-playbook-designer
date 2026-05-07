@@ -48,6 +48,8 @@ export function PlaybookDesigner() {
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [isExportingVideo, setIsExportingVideo] = useState(false)
   const [exportVideoProgress, setExportVideoProgress] = useState(0)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportFilename, setExportFilename] = useState("")
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -1058,7 +1060,7 @@ export function PlaybookDesigner() {
     return Math.max(groups, 1)
   }, [arrows])
 
-  const handleExportVideo = useCallback(async () => {
+  const handleExportVideo = useCallback(async (filename: string) => {
     const fieldEl = document.querySelector("[data-field-canvas]") as HTMLElement | null
     if (!fieldEl) return
     if (arrows.length === 0) return
@@ -1078,7 +1080,7 @@ export function PlaybookDesigner() {
       const exportPromise = exportPlayAsGif(
         fieldEl,
         animDuration,
-        playName || "tryline-play",
+        filename,
         (progress) => setExportVideoProgress(Math.round(progress * 100))
       )
 
@@ -1093,7 +1095,7 @@ export function PlaybookDesigner() {
       setIsExportingVideo(false)
       setExportVideoProgress(0)
     }
-  }, [animationSpeed, arrows.length, getAnimationGroupCount, playName])
+  }, [animationSpeed, arrows.length, getAnimationGroupCount])
 
   const handleGenerateNotes = useCallback(() => {
     const generatedNotes = generatePlayNotes({
@@ -1437,7 +1439,10 @@ export function PlaybookDesigner() {
         onDeletePlay={handleDeletePlay}
         onDuplicatePlay={handleDuplicatePlay}
         onExportPDF={handleExportPDF}
-        onExportVideo={handleExportVideo}
+        onExportVideo={() => {
+          setExportFilename(playName || "tryline-play")
+          setShowExportModal(true)
+        }}
         isExportingVideo={isExportingVideo}
         exportVideoProgress={exportVideoProgress}
         canExportVideo={arrows.length > 0 && !isPresentationMode}
@@ -1451,6 +1456,44 @@ export function PlaybookDesigner() {
         onApplyKickoffFormation={handleApplyKickoffFormation}
         onGenerateNotes={handleGenerateNotes}
       />
+      )}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card border border-border rounded-lg p-4 w-72 shadow-xl">
+            <h3 className="text-sm font-semibold mb-3">Export Play as GIF</h3>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Name your file — share via WhatsApp or save to device
+            </p>
+            <input
+              type="text"
+              value={exportFilename}
+              onChange={(e) => setExportFilename(e.target.value)}
+              placeholder="e.g. Scrum Play Option 1"
+              className="w-full px-2 py-1.5 text-sm rounded border border-border bg-background mb-3 focus:outline-none focus:ring-1 focus:ring-primary"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleExportVideo(exportFilename)
+              }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="flex-1 px-3 py-1.5 text-xs rounded border border-border hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowExportModal(false)
+                  handleExportVideo(exportFilename || playName || "tryline-play")
+                }}
+                className="flex-1 px-3 py-1.5 text-xs rounded bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                Export GIF
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

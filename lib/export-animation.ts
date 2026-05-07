@@ -21,9 +21,9 @@ export async function exportPlayAsGif(
     workerScript: '/gif.worker.js',
   })
 
-  const fps = 10
+  const fps = 15
   const totalFrames = Math.ceil((duration / 1000) * fps)
-  const frameDelay = Math.round(1000 / fps)
+  const frameDelay = Math.round(duration / totalFrames)
 
   const captureFrame = (): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
@@ -73,6 +73,9 @@ export async function exportPlayAsGif(
           resolve()
         })
         gif.on('error', reject)
+        // Add final frame held for 2 seconds
+        const finalCanvas = await captureFrame()
+        gif.addFrame(finalCanvas, { delay: 2000, copy: true })
         gif.render()
         return
       }
