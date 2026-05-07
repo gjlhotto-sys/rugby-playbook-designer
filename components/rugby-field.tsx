@@ -1,8 +1,13 @@
 "use client"
 
-import { useRef, useCallback, useState, useEffect } from "react"
+import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { ARROW_TYPES } from "@/lib/types"
+
+export interface RugbyFieldHandle {
+  play: () => void
+  reset: () => void
+}
 
 interface ContextMenuState {
   visible: boolean
@@ -74,7 +79,7 @@ interface RugbyFieldProps {
   animationSpeed?: 0.5 | 1 | 2
 }
 
-export function RugbyField({
+export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
   players = [],
   arrows = [],
   ball,
@@ -127,7 +132,7 @@ export function RugbyField({
   onArrowTypeChange,
   onTextLabelCreate,
   animationSpeed = 1,
-}: RugbyFieldProps) {
+}: RugbyFieldProps, ref) {
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
     fromX: number
@@ -647,6 +652,11 @@ export function RugbyField({
     animationGroupsRef.current = []
     kickCurveRef.current = null
   }, [clearGroupTimeout])
+
+  useImperativeHandle(ref, () => ({
+    play: handlePlay,
+    reset: handleReset,
+  }), [handlePlay, handleReset])
 
   useEffect(() => {
     return () => {
@@ -2229,4 +2239,4 @@ export function RugbyField({
       )}
     </div>
   )
-}
+})

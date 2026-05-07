@@ -34,6 +34,10 @@ interface PlaybookSidebarProps {
   onDeletePlay: (playId: string) => void
   onDuplicatePlay: (play: SavedPlay) => void
   onExportPDF: () => void
+  onExportVideo: () => void
+  isExportingVideo: boolean
+  exportVideoProgress: number
+  canExportVideo: boolean
   selectedPlacementToken: SidebarPlacementToken | null
   onSelectPlacementToken: (token: SidebarPlacementToken | null) => void
   onApplyAttackFormation: () => void
@@ -185,6 +189,10 @@ export function PlaybookSidebar({
   onDeletePlay,
   onDuplicatePlay,
   onExportPDF,
+  onExportVideo,
+  isExportingVideo,
+  exportVideoProgress,
+  canExportVideo,
   selectedPlacementToken,
   onSelectPlacementToken,
   onApplyAttackFormation,
@@ -681,6 +689,26 @@ export function PlaybookSidebar({
           >
             📄 Export PDF
           </Button>
+          <div className="mt-1">
+            <button
+              onClick={onExportVideo}
+              disabled={isExportingVideo || !canExportVideo}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Export animation as GIF"
+            >
+              {isExportingVideo ? (
+                <>
+                  <span className="animate-spin">⟳</span>
+                  Exporting... {exportVideoProgress}%
+                </>
+              ) : (
+                <>🎬 Export Video</>
+              )}
+            </button>
+            <p className="text-[9px] text-muted-foreground text-center mt-1">
+              Exports as GIF — share via WhatsApp
+            </p>
+          </div>
         </div>
         <Button
           onClick={onClearField}

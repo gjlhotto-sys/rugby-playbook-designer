@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { RugbyField } from "./rugby-field"
+import { RugbyField, type RugbyFieldHandle } from "./rugby-field"
 import { PlaybookSidebar, type SidebarPlacementToken } from "./playbook-sidebar"
 import { Move, Pencil, Undo2, ChevronDown } from "lucide-react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
+import { exportPlayAsGif } from "@/lib/export-animation"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
@@ -45,6 +46,8 @@ export function PlaybookDesigner() {
   const [panX, setPanX] = useState(0)
   const [panY, setPanY] = useState(0)
   const [isPresentationMode, setIsPresentationMode] = useState(false)
+  const [isExportingVideo, setIsExportingVideo] = useState(false)
+  const [exportVideoProgress, setExportVideoProgress] = useState(0)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -53,6 +56,7 @@ export function PlaybookDesigner() {
   // Track drag start state for undo
   const dragStartRef = useRef<{ type: "player" | "ball" | "phase"; id: string; x: number; y: number; arrows: Arrow[] } | null>(null)
   const fieldContainerRef = useRef<HTMLDivElement>(null)
+  const fieldRef = useRef<RugbyFieldHandle | null>(null)
   const isPanning = useRef(false)
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
 
@@ -1032,6 +1036,65 @@ export function PlaybookDesigner() {
     printWindow.document.close()
   }, [notes, playName, playType])
 
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+  const getAnimationGroupCount = useCallback(() => {
+    type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
+    const sequences = arrows
+      .map((a) => (a as SequencedArrow).sequence)
+      .filter((s): s is number => typeof s === "number")
+    if (sequences.length > 0) return Math.max(...sequences)
+
+    const timestamps = arrows
+      .map((a) => (a as SequencedArrow).timestamp)
+      .filter((t): t is number => typeof t === "number")
+      .sort((a, b) => a - b)
+    if (timestamps.length === 0) return 3
+
+    let groups = 1
+    for (let i = 1; i < timestamps.length; i++) {
+      if (Math.abs(timestamps[i] - timestamps[i - 1]) >= 500) groups += 1
+    }
+    return Math.max(groups, 1)
+  }, [arrows])
+
+  const handleExportVideo = useCallback(async () => {
+    const fieldEl = document.querySelector("[data-field-canvas]") as HTMLElement | null
+    if (!fieldEl) return
+    if (arrows.length === 0) return
+
+    setIsExportingVideo(true)
+    setExportVideoProgress(0)
+
+    try {
+      fieldRef.current?.reset()
+      await sleep(200)
+
+      const groupCount = getAnimationGroupCount()
+      const groupDuration = 2000 / animationSpeed
+      const gaps = Math.max(groupCount - 1, 0) * 300
+      const animDuration = groupCount * groupDuration + gaps + 500
+
+      const exportPromise = exportPlayAsGif(
+        fieldEl,
+        animDuration,
+        playName || "tryline-play",
+        (progress) => setExportVideoProgress(Math.round(progress * 100))
+      )
+
+      fieldRef.current?.play()
+      await exportPromise
+
+      window.alert("✓ GIF saved! Share via WhatsApp by attaching the file.")
+    } catch (err) {
+      console.error("Export failed:", err)
+      window.alert("Export failed. Please try again.")
+    } finally {
+      setIsExportingVideo(false)
+      setExportVideoProgress(0)
+    }
+  }, [animationSpeed, arrows.length, getAnimationGroupCount, playName])
+
   const handleGenerateNotes = useCallback(() => {
     const generatedNotes = generatePlayNotes({
       playType,
@@ -1248,6 +1311,7 @@ export function PlaybookDesigner() {
             }}
           >
             <RugbyField
+            ref={fieldRef}
             players={fieldPlayers}
             arrows={arrows}
             ball={ball}
@@ -1373,6 +1437,10 @@ export function PlaybookDesigner() {
         onDeletePlay={handleDeletePlay}
         onDuplicatePlay={handleDuplicatePlay}
         onExportPDF={handleExportPDF}
+        onExportVideo={handleExportVideo}
+        isExportingVideo={isExportingVideo}
+        exportVideoProgress={exportVideoProgress}
+        canExportVideo={arrows.length > 0 && !isPresentationMode}
         selectedPlacementToken={selectedPlacementToken}
         onSelectPlacementToken={setSelectedPlacementToken}
         onApplyAttackFormation={handleApplyAttackFormation}
