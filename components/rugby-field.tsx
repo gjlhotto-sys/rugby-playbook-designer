@@ -1825,7 +1825,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         ))}
         
         {/* Center circle */}
-        <circle cx={BUFFER + 35} cy={BUFFER + 55} r="4" fill="none" stroke="white" strokeWidth="0.3" />
+        <circle cx={BUFFER + 35} cy={BUFFER + 55} r="0.5" fill="white" opacity="0.6" />
         
         {/* Goal posts - Top (H-shape) */}
         <g>
