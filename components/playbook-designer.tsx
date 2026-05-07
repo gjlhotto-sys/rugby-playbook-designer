@@ -1083,7 +1083,6 @@ export function PlaybookDesigner() {
         fieldEl,
         animDuration,
         filename,
-        animationSpeed,
         (progress) => setExportVideoProgress(Math.round(progress * 100))
       )
 
@@ -1139,6 +1138,7 @@ export function PlaybookDesigner() {
           onApplyLineoutFormation={handleApplyLineoutFormation}
           onApplyScrumFormation={handleApplyScrumFormation}
           onApplyKickoffFormation={handleApplyKickoffFormation}
+          onClearField={handleClearField}
         />
       )}
       {/* Main field area with toolbar */}

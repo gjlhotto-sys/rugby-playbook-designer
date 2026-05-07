@@ -133,6 +133,7 @@ interface PlaybookLeftSidebarProps {
   onApplyLineoutFormation: () => void
   onApplyScrumFormation: () => void
   onApplyKickoffFormation: () => void
+  onClearField: () => void
 }
 
 export function PlaybookLeftSidebar({
@@ -150,6 +151,7 @@ export function PlaybookLeftSidebar({
   onApplyLineoutFormation,
   onApplyScrumFormation,
   onApplyKickoffFormation,
+  onClearField,
 }: PlaybookLeftSidebarProps) {
   const attackOnField = fieldPlayers.filter((p) => p.team === "attack").length
   const defenseOnField = fieldPlayers.filter((p) => p.team === "defense").length
@@ -340,6 +342,13 @@ export function PlaybookLeftSidebar({
             ))}
           </div>
         </div>
+
+        <button
+          onClick={onClearField}
+          className="w-full mt-2 px-3 py-1.5 text-xs rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          🗑 Clear Field
+        </button>
       </div>
     </aside>
   )

@@ -2,7 +2,6 @@ export async function exportPlayAsGif(
   fieldElement: HTMLElement,
   duration: number,
   filename: string,
-  animationSpeed: number = 1,
   onProgress?: (progress: number) => void
 ): Promise<void> {
   const GIF = (await import('gif.js')).default
@@ -22,12 +21,15 @@ export async function exportPlayAsGif(
     workerScript: '/gif.worker.js',
   })
 
-  const adjustedDuration = duration * (1 / animationSpeed)
-  const fps = 15
-  const totalFrames = Math.ceil((adjustedDuration / 1000) * fps)
-  const baseDuration = adjustedDuration
-  const frameDelay = Math.round((baseDuration / totalFrames) * 1.2)
-  const RENDER_BUFFER = 50 // ms for React to paint
+  const FRAME_DELAY_MS = 100 // capture a frame every 100ms
+  const RENDER_WAIT_MS = 80 // wait for React to paint before capture
+  
+  // Calculate total frames based on duration
+  const totalFrames = Math.ceil(duration / FRAME_DELAY_MS)
+  
+  // Each GIF frame delay should match capture interval
+  // to play back at the same speed as real animation
+  const gifFrameDelay = FRAME_DELAY_MS
 
   const captureFrame = (): Promise<HTMLCanvasElement> => {
     return new Promise((resolve) => {
@@ -77,19 +79,20 @@ export async function exportPlayAsGif(
           resolve()
         })
         gif.on('error', reject)
-        // Add final frame held for 2 seconds
-        const finalCanvas = await captureFrame()
-        gif.addFrame(finalCanvas, { delay: 2000, copy: true })
         gif.render()
         return
       }
 
       try {
-        const canvas = await captureFrame()
-        gif.addFrame(canvas, { delay: frameDelay, copy: true })
-        frameCount++
-        onProgress?.(frameCount / totalFrames)
-        setTimeout(captureNextFrame, frameDelay + RENDER_BUFFER)
+        // Wait for React to render, THEN capture
+        setTimeout(async () => {
+          const canvas = await captureFrame()
+          gif.addFrame(canvas, { delay: gifFrameDelay, copy: true })
+          frameCount++
+          onProgress?.(frameCount / totalFrames)
+          // Schedule next frame
+          captureNextFrame()
+        }, RENDER_WAIT_MS)
       } catch (err) {
         reject(err)
       }
