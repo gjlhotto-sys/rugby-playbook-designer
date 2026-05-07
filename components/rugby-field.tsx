@@ -1731,7 +1731,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     >
       {arrows.length > 0 && (
         <div className="absolute top-2 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-md border border-border bg-card/90 px-2 py-1">
-          <button onClick={handlePlay} className="px-2 py-1 text-[10px] rounded border border-border bg-emerald-600/80 text-white">
+          <button data-play-button onClick={handlePlay} className="px-2 py-1 text-[10px] rounded border border-border bg-emerald-600/80 text-white">
             ▶ Play
           </button>
           <button onClick={handlePause} className="px-2 py-1 text-[10px] rounded border border-border bg-amber-500/90 text-black">

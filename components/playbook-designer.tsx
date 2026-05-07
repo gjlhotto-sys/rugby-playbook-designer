@@ -1079,7 +1079,16 @@ export function PlaybookDesigner() {
       const gaps = Math.max(groupCount - 1, 0) * 300
       const animDuration = groupCount * groupDuration + gaps + 500
 
-      fieldRef.current?.play()
+      // Trigger play BEFORE starting recording
+      if (fieldRef.current?.play) {
+        fieldRef.current.play()
+      } else {
+        const playButton = document.querySelector('[data-play-button]') as HTMLButtonElement | null
+        playButton?.click()
+      }
+
+      await sleep(200)
+
       await exportPlayAsVideo(
         svgEl,
         animDuration,
