@@ -10,6 +10,7 @@ import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, Saved
 import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
+import { savePlayToCloud } from "@/lib/play-sharing"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
@@ -52,6 +53,9 @@ export function PlaybookDesigner() {
   const [exportVideoProgress, setExportVideoProgress] = useState(0)
   const [showExportModal, setShowExportModal] = useState(false)
   const [exportFilename, setExportFilename] = useState("")
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [isSharing, setIsSharing] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -1125,6 +1129,32 @@ export function PlaybookDesigner() {
     setNotes(generatedNotes)
   }, [playType, fieldPlayers, arrows])
 
+  const handleSharePlay = useCallback(async () => {
+    setIsSharing(true)
+    setShareUrl(null)
+
+    const shareId = await savePlayToCloud({
+      name: playName,
+      play_type: playType,
+      notes,
+      players: fieldPlayers,
+      arrows,
+      ball,
+      phases,
+      cones,
+      labels,
+      team_colors: teamColors,
+    })
+
+    if (shareId) {
+      const url = `${window.location.origin}/play/${shareId}`
+      setShareUrl(url)
+    } else {
+      window.alert('Failed to generate share link. Please try again.')
+    }
+    setIsSharing(false)
+  }, [arrows, ball, cones, fieldPlayers, labels, notes, phases, playName, playType, teamColors])
+
   const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
 
   return (
@@ -1466,11 +1496,47 @@ export function PlaybookDesigner() {
             setExportFilename(playName || "tryline-play")
             setShowExportModal(true)
           }}
+          onSharePlay={handleSharePlay}
+          isSharing={isSharing}
           isExportingVideo={isExportingVideo}
           exportVideoProgress={exportVideoProgress}
           canExportVideo={arrows.length > 0 && !isPresentationMode}
           onGenerateNotes={handleGenerateNotes}
         />
+      )}
+      {shareUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-card border border-border rounded-lg p-4 w-80 shadow-xl">
+            <h3 className="text-sm font-semibold mb-1">Play Link Ready!</h3>
+            <p className="text-[11px] text-muted-foreground mb-3">
+              Share this link via WhatsApp — players can watch the
+              animation on their phone, no app needed.
+            </p>
+            <div className="flex gap-2 mb-3">
+              <input
+                readOnly
+                value={shareUrl}
+                className="flex-1 px-2 py-1.5 text-[10px] rounded border border-border bg-background truncate"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl)
+                  setShareCopied(true)
+                  setTimeout(() => setShareCopied(false), 2000)
+                }}
+                className="px-3 py-1.5 text-xs rounded bg-primary text-primary-foreground whitespace-nowrap"
+              >
+                {shareCopied ? '✓ Copied!' : 'Copy'}
+              </button>
+            </div>
+            <button
+              onClick={() => setShareUrl(null)}
+              className="w-full px-3 py-1.5 text-xs rounded border border-border hover:bg-muted"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

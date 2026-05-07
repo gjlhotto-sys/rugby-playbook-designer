@@ -24,6 +24,8 @@ interface PlaybookRightSidebarProps {
   onDuplicatePlay: (play: SavedPlay) => void
   onExportPDF: () => void
   onExportVideo: () => void
+  onSharePlay: () => void
+  isSharing: boolean
   isExportingVideo: boolean
   exportVideoProgress: number
   canExportVideo: boolean
@@ -47,6 +49,8 @@ export function PlaybookRightSidebar({
   onDuplicatePlay,
   onExportPDF,
   onExportVideo,
+  onSharePlay,
+  isSharing,
   isExportingVideo,
   exportVideoProgress,
   canExportVideo,
@@ -281,6 +285,17 @@ export function PlaybookRightSidebar({
             )}
           </button>
           <p className="text-[11px] text-muted-foreground text-center">Exports as MP4 — plays in WhatsApp</p>
+          <button
+            onClick={onSharePlay}
+            disabled={isSharing || fieldPlayers.length === 0}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSharing ? (
+              <><span className="animate-spin">⟳</span> Generating link...</>
+            ) : (
+              <>🔗 Share Play</>
+            )}
+          </button>
         </div>
 
         <div className="px-3 py-2">
