@@ -269,7 +269,7 @@ export function PlaybookRightSidebar({
             onClick={onExportVideo}
             disabled={isExportingVideo || !canExportVideo}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Export animation as GIF"
+            title="Export animation as video"
           >
             {isExportingVideo ? (
               <>
@@ -277,10 +277,10 @@ export function PlaybookRightSidebar({
                 Exporting... {exportVideoProgress}%
               </>
             ) : (
-              <>🎬 Export Video</>
+              <>🎬 Export Video (MP4)</>
             )}
           </button>
-          <p className="text-[11px] text-muted-foreground text-center">Exports as GIF — share via WhatsApp</p>
+          <p className="text-[11px] text-muted-foreground text-center">Exports as MP4 — plays in WhatsApp</p>
         </div>
 
         <div className="px-3 py-2">

@@ -9,7 +9,7 @@ import { Move, Pencil, Undo2, ChevronDown } from "lucide-react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
-import { exportPlayAsGif } from "@/lib/export-animation"
+import { exportPlayAsVideo } from "@/lib/export-animation"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
@@ -1063,8 +1063,8 @@ export function PlaybookDesigner() {
   }, [arrows])
 
   const handleExportVideo = useCallback(async (filename: string) => {
-    const fieldEl = document.querySelector("[data-field-canvas]") as HTMLElement | null
-    if (!fieldEl) return
+    const svgEl = document.querySelector('[data-field-canvas] svg') as SVGSVGElement | null
+    if (!svgEl) return
     if (arrows.length === 0) return
 
     setIsExportingVideo(true)
@@ -1079,17 +1079,15 @@ export function PlaybookDesigner() {
       const gaps = Math.max(groupCount - 1, 0) * 300
       const animDuration = groupCount * groupDuration + gaps + 500
 
-      const exportPromise = exportPlayAsGif(
-        fieldEl,
+      fieldRef.current?.play()
+      await exportPlayAsVideo(
+        svgEl,
         animDuration,
         filename,
         (progress) => setExportVideoProgress(Math.round(progress * 100))
       )
 
-      fieldRef.current?.play()
-      await exportPromise
-
-      window.alert("✓ GIF saved! Share via WhatsApp by attaching the file.")
+      window.alert("✓ Video saved! Share via WhatsApp by attaching the file.")
     } catch (err) {
       console.error("Export failed:", err)
       window.alert("Export failed. Please try again.")
@@ -1468,7 +1466,7 @@ export function PlaybookDesigner() {
       {showExportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-card border border-border rounded-lg p-4 w-72 shadow-xl">
-            <h3 className="text-sm font-semibold mb-3">Export Play as GIF</h3>
+            <h3 className="text-sm font-semibold mb-3">Export Play as Video</h3>
             <p className="text-[11px] text-muted-foreground mb-3">
               Name your file — share via WhatsApp or save to device
             </p>
@@ -1497,7 +1495,7 @@ export function PlaybookDesigner() {
                 }}
                 className="flex-1 px-3 py-1.5 text-xs rounded bg-purple-600 hover:bg-purple-700 text-white"
               >
-                Export GIF
+                Export Video
               </button>
             </div>
           </div>
