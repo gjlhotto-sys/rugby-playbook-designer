@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'TryLine',
+  title: 'PlayForge — Rugby Playbook Designer',
   description: 'Rugby Playbook Designer — Design, animate and share plays',
   generator: 'v0.app',
   icons: {

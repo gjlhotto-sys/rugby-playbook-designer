@@ -157,7 +157,9 @@ export function PlaybookDesigner() {
   }, [zoom])
 
   useEffect(() => {
-    document.title = playName ? `TryLine — ${playName}` : "TryLine"
+    document.title = playName
+      ? `PlayForge — ${playName}`
+      : 'PlayForge'
   }, [playName])
 
   const handleUndo = useCallback(() => {
@@ -1032,7 +1034,7 @@ export function PlaybookDesigner() {
         ${svgBase64 ? `<img src="data:image/svg+xml;base64,${svgBase64}" class="field" />` : ""}
         <div class="notes-label">Coaching Notes</div>
         <div class="notes">${safeNotes}</div>
-        <div class="footer">TryLine | tryline.app</div>
+        <div class="footer">PlayForge | playforge.app</div>
         <script>
           window.onload = function() {
             setTimeout(() => window.print(), 500)
@@ -1493,7 +1495,7 @@ export function PlaybookDesigner() {
           onDuplicatePlay={handleDuplicatePlay}
           onExportPDF={handleExportPDF}
           onExportVideo={() => {
-            setExportFilename(playName || "tryline-play")
+            setExportFilename(playName || "playforge-play")
             setShowExportModal(true)
           }}
           onSharePlay={handleSharePlay}
@@ -1566,7 +1568,7 @@ export function PlaybookDesigner() {
               <button
                 onClick={() => {
                   setShowExportModal(false)
-                  handleExportVideo(exportFilename || playName || "tryline-play")
+                  handleExportVideo(exportFilename || playName || "playforge-play")
                 }}
                 className="flex-1 px-3 py-1.5 text-xs rounded bg-purple-600 hover:bg-purple-700 text-white"
               >

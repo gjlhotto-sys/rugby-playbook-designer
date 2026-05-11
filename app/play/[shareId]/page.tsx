@@ -48,7 +48,7 @@ export default function PlayViewPage() {
             {play.name || 'Untitled Play'}
           </h1>
           <p className="text-[10px] text-muted-foreground">
-            {play.play_type} • TryLine
+            {play.play_type} • PlayForge
           </p>
         </div>
         <div className="text-lg">🏉</div>

@@ -262,7 +262,7 @@ export function PlaybookSidebar({
     <aside className="w-[160px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
       {/* Header */}
       <div className="px-2 py-1.5 border-b border-sidebar-border shrink-0">
-        <h1 className="text-[10px] font-bold text-foreground">TryLine</h1>
+        <h1 className="text-[10px] font-bold text-foreground">PlayForge</h1>
         <p className="text-[8px] text-muted-foreground">Rugby Playbook Designer</p>
       </div>
 
