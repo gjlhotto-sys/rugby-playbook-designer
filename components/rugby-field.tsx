@@ -6,6 +6,7 @@ import { ARROW_TYPES } from "@/lib/types"
 
 export interface RugbyFieldHandle {
   play: () => void
+  pause: () => void
   reset: () => void
 }
 
@@ -77,6 +78,8 @@ interface RugbyFieldProps {
   onArrowTypeChange: (arrowId: string, newType: ArrowType) => void
   onTextLabelCreate: (x: number, y: number) => void
   animationSpeed?: 0.5 | 1 | 2
+  /** When true, hides the in-field Play/Pause/Reset toolbar (e.g. shared play view with external controls). */
+  hideControls?: boolean
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -132,6 +135,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   onArrowTypeChange,
   onTextLabelCreate,
   animationSpeed = 1,
+  hideControls = false,
 }: RugbyFieldProps, ref) {
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
@@ -655,8 +659,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
   useImperativeHandle(ref, () => ({
     play: handlePlay,
+    pause: handlePause,
     reset: handleReset,
-  }), [handlePlay, handleReset])
+  }), [handlePlay, handlePause, handleReset])
 
   useEffect(() => {
     return () => {
@@ -1729,7 +1734,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         clickToPlaceActive ? "ring-2 ring-primary/60 rounded-md animate-pulse" : ""
       }`}
     >
-      {arrows.length > 0 && (
+      {arrows.length > 0 && !hideControls && (
         <div className="absolute top-2 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-md border border-border bg-card/90 px-2 py-1">
           <button data-play-button onClick={handlePlay} className="px-2 py-1 text-[10px] rounded border border-border bg-emerald-600/80 text-white">
             ▶ Play

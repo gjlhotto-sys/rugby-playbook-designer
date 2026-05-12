@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
@@ -6,10 +6,20 @@ import './globals.css'
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
+
 export const metadata: Metadata = {
   title: 'PlayForge — Rugby Playbook Designer',
   description: 'Rugby Playbook Designer — Design, animate and share plays',
   generator: 'v0.app',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+  },
   icons: {
     icon: [
       {
