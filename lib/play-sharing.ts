@@ -1,5 +1,16 @@
 import { supabase } from './supabase'
-import type { FieldPlayer, Arrow, BallToken, PhaseMarker, ConeMarker, TextLabel, TeamColors } from './types'
+import type {
+  FieldPlayer,
+  Arrow,
+  BallToken,
+  PhaseMarker,
+  ConeMarker,
+  TextLabel,
+  TeamColors,
+  SavedPlay,
+  PlayType,
+} from './types'
+import { PLAY_TYPES } from './types'
 
 export interface PlayData {
   name: string
@@ -14,8 +25,66 @@ export interface PlayData {
   team_colors: TeamColors
 }
 
+function isPlayType(value: string): value is PlayType {
+  return PLAY_TYPES.includes(value as PlayType)
+}
+
+function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
+  const shareId = row.share_id != null ? String(row.share_id) : null
+  if (!shareId) return null
+  const playTypeRaw = typeof row.play_type === 'string' ? row.play_type : 'Free Play'
+  const playType: PlayType = isPlayType(playTypeRaw) ? playTypeRaw : 'Free Play'
+  const teamColors = row.team_colors as TeamColors | undefined
+  return {
+    id: `cloud:${shareId}`,
+    name: typeof row.name === 'string' ? row.name : 'Untitled Play',
+    playType,
+    notes: typeof row.notes === 'string' ? row.notes : '',
+    timestamp:
+      typeof row.updated_at === 'string'
+        ? row.updated_at
+        : new Date().toISOString(),
+    teamColors: teamColors ?? {
+      attack: '#3B82F6',
+      defense: '#EF4444',
+    },
+    players: (row.players as FieldPlayer[]) ?? [],
+    arrows: (row.arrows as Arrow[]) ?? [],
+    ball: (row.ball as BallToken | null) ?? null,
+    phases: (row.phases as PhaseMarker[]) ?? [],
+    cones: (row.cones as ConeMarker[]) ?? [],
+    labels: (row.labels as TextLabel[]) ?? [],
+  }
+}
+
+export async function loadCloudPlaysForUser(): Promise<SavedPlay[]> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data, error } = await supabase
+    .from('plays')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+
+  if (error || !data) {
+    console.error('Failed to load cloud plays:', error)
+    return []
+  }
+
+  return (data as Record<string, unknown>[])
+    .map((row) => playRowToSavedPlay(row))
+    .filter((p): p is SavedPlay => p != null)
+}
+
 export async function savePlayToCloud(playData: PlayData): Promise<string | null> {
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
     const { data, error } = await supabase
       .from('plays')
       .insert({
@@ -29,6 +98,7 @@ export async function savePlayToCloud(playData: PlayData): Promise<string | null
         cones: playData.cones,
         labels: playData.labels,
         team_colors: playData.team_colors,
+        user_id: user?.id ?? null,
       })
       .select('share_id')
       .single()

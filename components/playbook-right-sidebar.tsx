@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import type { User } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, Save, Copy } from "lucide-react"
@@ -8,6 +9,8 @@ import type { FieldPlayer, TeamColors, SavedPlay, PlayType } from "@/lib/types"
 import { PLAY_TYPES, PLAY_TYPE_COLORS } from "@/lib/types"
 
 interface PlaybookRightSidebarProps {
+  user: User
+  onSignOut: () => void
   playName: string
   playType: PlayType
   notes: string
@@ -17,6 +20,7 @@ interface PlaybookRightSidebarProps {
   fieldPlayers: FieldPlayer[]
   teamColors: TeamColors
   savedPlays: SavedPlay[]
+  cloudSavedPlays: SavedPlay[]
   onTeamColorChange: (team: "attack" | "defense" | "attackArrow" | "defenceArrow", color: string) => void
   onSavePlay: () => void
   onLoadPlay: (play: SavedPlay) => void
@@ -33,6 +37,8 @@ interface PlaybookRightSidebarProps {
 }
 
 export function PlaybookRightSidebar({
+  user,
+  onSignOut,
   playName,
   playType,
   notes,
@@ -42,6 +48,7 @@ export function PlaybookRightSidebar({
   fieldPlayers,
   teamColors,
   savedPlays,
+  cloudSavedPlays,
   onTeamColorChange,
   onSavePlay,
   onLoadPlay,
@@ -113,6 +120,20 @@ export function PlaybookRightSidebar({
 
   return (
     <aside className="w-[200px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-1.5">
+        <div>
+          <p className="max-w-[140px] truncate text-[10px] text-muted-foreground">
+            {user.email}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Sign out
+        </button>
+      </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-3 py-2 border-b border-sidebar-border">
           <h1 className="text-[11px] font-bold text-foreground">PlayForge</h1>
@@ -302,7 +323,7 @@ export function PlaybookRightSidebar({
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold text-foreground">My Plays</h2>
           </div>
-          {savedPlays.length === 0 ? (
+          {savedPlays.length === 0 && cloudSavedPlays.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">No saved plays yet.</p>
           ) : (
             <div className="space-y-1">
@@ -322,6 +343,7 @@ export function PlaybookRightSidebar({
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         onDuplicatePlay(play)
@@ -332,6 +354,7 @@ export function PlaybookRightSidebar({
                       <Copy className="w-4 h-4" />
                     </button>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         onDeletePlay(play.id)
@@ -340,6 +363,38 @@ export function PlaybookRightSidebar({
                       title="Delete play"
                     >
                       <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {cloudSavedPlays.map((play) => (
+                <div
+                  key={play.id}
+                  className="group flex items-center gap-2 p-2 rounded bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+                  onClick={() => onLoadPlay(play)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-[11px]" title="Saved in cloud">
+                        ☁️
+                      </span>
+                      <span className="text-[12px] text-foreground truncate font-medium">{play.name}</span>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium text-white" style={{ backgroundColor: PLAY_TYPE_COLORS[play.playType] }}>
+                      {play.playType}
+                    </span>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDuplicatePlay(play)
+                      }}
+                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                      title="Duplicate to this device"
+                    >
+                      <Copy className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
+import type { User } from "@supabase/supabase-js"
+import { supabase } from "@/lib/supabase"
 import { RugbyField, type RugbyFieldHandle } from "./rugby-field"
 import { type SidebarPlacementToken } from "./playbook-sidebar"
 import { PlaybookLeftSidebar } from "./playbook-left-sidebar"
@@ -10,14 +12,18 @@ import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, Saved
 import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
-import { savePlayToCloud } from "@/lib/play-sharing"
+import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
 const FIELD_WIDTH = 70
 const FIELD_HEIGHT = 110
 
-export function PlaybookDesigner() {
+interface PlaybookDesignerProps {
+  user: User
+}
+
+export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
   const [fieldPlayers, setFieldPlayers] = useState<FieldPlayer[]>([])
   const [arrows, setArrows] = useState<Arrow[]>([])
   const [ball, setBall] = useState<BallToken | null>(null)
@@ -40,6 +46,7 @@ export function PlaybookDesigner() {
   })
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const [savedPlays, setSavedPlays] = useState<SavedPlay[]>([])
+  const [cloudSavedPlays, setCloudSavedPlays] = useState<SavedPlay[]>([])
   const [arrowDropdownOpen, setArrowDropdownOpen] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
@@ -91,6 +98,19 @@ export function PlaybookDesigner() {
       console.error("Failed to save plays:", e)
     }
   }, [savedPlays])
+
+  const loadCloudPlays = useCallback(async () => {
+    const plays = await loadCloudPlaysForUser()
+    setCloudSavedPlays(plays)
+  }, [])
+
+  useEffect(() => {
+    void loadCloudPlays()
+  }, [loadCloudPlays])
+
+  const handleSignOut = useCallback(async () => {
+    await supabase.auth.signOut()
+  }, [])
 
   // Keyboard shortcut for undo
   useEffect(() => {
@@ -886,6 +906,7 @@ export function PlaybookDesigner() {
   }, [])
 
   const handleDeletePlay = useCallback((playId: string) => {
+    if (playId.startsWith("cloud:")) return
     setSavedPlays(prev => prev.filter(p => p.id !== playId))
   }, [])
 
@@ -1151,11 +1172,12 @@ export function PlaybookDesigner() {
     if (shareId) {
       const url = `${window.location.origin}/play/${shareId}`
       setShareUrl(url)
+      void loadCloudPlays()
     } else {
       window.alert('Failed to generate share link. Please try again.')
     }
     setIsSharing(false)
-  }, [arrows, ball, cones, fieldPlayers, labels, notes, phases, playName, playType, teamColors])
+  }, [arrows, ball, cones, fieldPlayers, labels, loadCloudPlays, notes, phases, playName, playType, teamColors])
 
   const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
 
@@ -1479,6 +1501,8 @@ export function PlaybookDesigner() {
       {/* Sidebar */}
       {!isPresentationMode && (
         <PlaybookRightSidebar
+          user={user}
+          onSignOut={handleSignOut}
           playName={playName}
           playType={playType}
           notes={notes}
@@ -1488,6 +1512,7 @@ export function PlaybookDesigner() {
           fieldPlayers={fieldPlayers}
           teamColors={teamColors}
           savedPlays={savedPlays}
+          cloudSavedPlays={cloudSavedPlays}
           onTeamColorChange={handleTeamColorChange}
           onSavePlay={handleSavePlay}
           onLoadPlay={handleLoadPlay}
