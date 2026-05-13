@@ -1227,6 +1227,56 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     void handleSharePlay()
   }, [isPremium, handleSharePlay])
 
+  const handleUpgrade = useCallback(async () => {
+    try {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+      if (!authUser) return
+
+      const response = await fetch('/api/payfast/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: authUser.email ?? '',
+          name: profile?.full_name ?? authUser.email ?? '',
+          userId: authUser.id,
+        }),
+      })
+
+      if (!response.ok) {
+        alert('Failed to start checkout. Please try again.')
+        return
+      }
+
+      const payload = (await response.json()) as {
+        url: string
+        data: Record<string, string>
+      }
+      const { url, data } = payload
+
+      setShowUpgradeModal(false)
+
+      const form = document.createElement('form')
+      form.method = 'POST'
+      form.action = url
+
+      Object.entries(data).forEach(([key, value]) => {
+        const input = document.createElement('input')
+        input.type = 'hidden'
+        input.name = key
+        input.value = value
+        form.appendChild(input)
+      })
+
+      document.body.appendChild(form)
+      form.submit()
+    } catch (err) {
+      console.error('Upgrade error:', err)
+      alert('Failed to start checkout. Please try again.')
+    }
+  }, [profile])
+
   const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
 
   return (
@@ -1670,12 +1720,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             </ul>
             <button
               type="button"
-              onClick={() => {
-                setShowUpgradeModal(false)
-                alert(
-                  'Stripe payments coming soon! Contact jacques@playforge.co.za to upgrade.'
-                )
-              }}
+              onClick={handleUpgrade}
               className="mb-2 w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-500"
             >
               Upgrade Now
