@@ -2,14 +2,27 @@
 
 import { useState } from "react"
 import type { User } from "@supabase/supabase-js"
+import type { UserProfile, UserRole } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Trash2, Save, Copy } from "lucide-react"
 import type { FieldPlayer, TeamColors, SavedPlay, PlayType } from "@/lib/types"
 import { PLAY_TYPES, PLAY_TYPE_COLORS } from "@/lib/types"
 
+const roleBadge: Record<
+  UserRole,
+  { label: string; color: string }
+> = {
+  admin: { label: "Admin", color: "bg-purple-600" },
+  beta: { label: "Beta", color: "bg-green-600" },
+  subscriber: { label: "Pro", color: "bg-blue-600" },
+  coach: { label: "Free", color: "bg-gray-600" },
+}
+
 interface PlaybookRightSidebarProps {
   user: User
+  profile: UserProfile | null
+  isPremium: boolean
   onSignOut: () => void
   playName: string
   playType: PlayType
@@ -38,6 +51,8 @@ interface PlaybookRightSidebarProps {
 
 export function PlaybookRightSidebar({
   user,
+  profile,
+  isPremium,
   onSignOut,
   playName,
   playType,
@@ -63,6 +78,9 @@ export function PlaybookRightSidebar({
   canExportVideo,
   onGenerateNotes,
 }: PlaybookRightSidebarProps) {
+  const effectiveRole = profile?.role ?? "coach"
+  const badge = roleBadge[effectiveRole]
+
   const [attackArrowPickerOpen, setAttackArrowPickerOpen] = useState(false)
   const [defenceArrowPickerOpen, setDefenceArrowPickerOpen] = useState(false)
   const [tempAttackArrowColor, setTempAttackArrowColor] = useState(teamColors.attackArrow ?? teamColors.attack)
@@ -120,16 +138,21 @@ export function PlaybookRightSidebar({
 
   return (
     <aside className="w-[200px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-2 py-1.5">
-        <div>
-          <p className="max-w-[140px] truncate text-[10px] text-muted-foreground">
+      <div className="mb-2 flex shrink-0 items-center justify-between border-b border-border px-2 py-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium text-white ${badge.color}`}
+          >
+            {badge.label}
+          </span>
+          <p className="truncate text-[10px] text-muted-foreground">
             {user.email}
           </p>
         </div>
         <button
           type="button"
           onClick={onSignOut}
-          className="rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="flex-shrink-0 rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           Sign out
         </button>
@@ -291,9 +314,12 @@ export function PlaybookRightSidebar({
             📄 Export PDF
           </Button>
           <button
+            type="button"
             onClick={onExportVideo}
-            disabled={isExportingVideo || !canExportVideo}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={
+              isExportingVideo || (isPremium && !canExportVideo)
+            }
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed ${!isPremium ? "opacity-75" : ""}`}
             title="Export animation as video"
           >
             {isExportingVideo ? (
@@ -301,20 +327,25 @@ export function PlaybookRightSidebar({
                 <span className="animate-spin">⟳</span>
                 Exporting... {exportVideoProgress}%
               </>
-            ) : (
+            ) : isPremium ? (
               <>🎬 Export Video (MP4)</>
+            ) : (
+              <>🎬 Export Video (MP4) 🔒</>
             )}
           </button>
           <p className="text-[11px] text-muted-foreground text-center">Exports as MP4 — plays in WhatsApp</p>
           <button
+            type="button"
             onClick={onSharePlay}
-            disabled={isSharing || fieldPlayers.length === 0}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSharing || (isPremium && fieldPlayers.length === 0)}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed ${!isPremium ? "opacity-75" : ""}`}
           >
             {isSharing ? (
               <><span className="animate-spin">⟳</span> Generating link...</>
-            ) : (
+            ) : isPremium ? (
               <>🔗 Share Play</>
+            ) : (
+              <>🔗 Share Play 🔒</>
             )}
           </button>
         </div>

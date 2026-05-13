@@ -13,6 +13,8 @@ import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
+import type { UserProfile } from "@/lib/auth"
+import { hasFullAccess } from "@/lib/auth"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
@@ -21,9 +23,10 @@ const FIELD_HEIGHT = 110
 
 interface PlaybookDesignerProps {
   user: User
+  profile?: UserProfile | null
 }
 
-export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
+export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps) {
   const [fieldPlayers, setFieldPlayers] = useState<FieldPlayer[]>([])
   const [arrows, setArrows] = useState<Arrow[]>([])
   const [ball, setBall] = useState<BallToken | null>(null)
@@ -63,6 +66,8 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [isSharing, setIsSharing] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showSaveLimitModal, setShowSaveLimitModal] = useState(false)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -111,6 +116,8 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut()
   }, [])
+
+  const isPremium = hasFullAccess(profile?.role ?? "coach")
 
   // Keyboard shortcut for undo
   useEffect(() => {
@@ -869,6 +876,10 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
   }, [])
 
   const handleSavePlay = useCallback(() => {
+    if (!isPremium && savedPlays.length >= 3) {
+      setShowSaveLimitModal(true)
+      return
+    }
     const newPlay: SavedPlay = {
       id: `play-${Date.now()}`,
       name: playName || "Untitled Play",
@@ -883,10 +894,23 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
       cones,
       labels,
     }
-    
-    setSavedPlays(prev => [...prev, newPlay])
+
+    setSavedPlays((prev) => [...prev, newPlay])
     console.log("Saved play:", newPlay)
-  }, [playName, playType, notes, teamColors, fieldPlayers, arrows, ball, phases, cones, labels])
+  }, [
+    isPremium,
+    savedPlays.length,
+    playName,
+    playType,
+    notes,
+    teamColors,
+    fieldPlayers,
+    arrows,
+    ball,
+    phases,
+    cones,
+    labels,
+  ])
 
   const handleLoadPlay = useCallback((play: SavedPlay) => {
     setPlayName(play.name)
@@ -910,15 +934,22 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
     setSavedPlays(prev => prev.filter(p => p.id !== playId))
   }, [])
 
-  const handleDuplicatePlay = useCallback((play: SavedPlay) => {
-    const duplicatedPlay: SavedPlay = {
-      ...play,
-      id: `play-${Date.now()}`,
-      name: `${play.name} (Copy)`,
-      timestamp: new Date().toISOString(),
-    }
-    setSavedPlays(prev => [...prev, duplicatedPlay])
-  }, [])
+  const handleDuplicatePlay = useCallback(
+    (play: SavedPlay) => {
+      if (!isPremium && savedPlays.length >= 3) {
+        setShowSaveLimitModal(true)
+        return
+      }
+      const duplicatedPlay: SavedPlay = {
+        ...play,
+        id: `play-${Date.now()}`,
+        name: `${play.name} (Copy)`,
+        timestamp: new Date().toISOString(),
+      }
+      setSavedPlays((prev) => [...prev, duplicatedPlay])
+    },
+    [isPremium, savedPlays.length]
+  )
 
   const handleModeChange = useCallback((newMode: InteractionMode) => {
     setMode(newMode)
@@ -1178,6 +1209,23 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
     }
     setIsSharing(false)
   }, [arrows, ball, cones, fieldPlayers, labels, loadCloudPlays, notes, phases, playName, playType, teamColors])
+
+  const handleOpenExportVideo = useCallback(() => {
+    if (!isPremium) {
+      setShowUpgradeModal(true)
+      return
+    }
+    setExportFilename(playName || "playforge-play")
+    setShowExportModal(true)
+  }, [isPremium, playName])
+
+  const handleOpenSharePlay = useCallback(() => {
+    if (!isPremium) {
+      setShowUpgradeModal(true)
+      return
+    }
+    void handleSharePlay()
+  }, [isPremium, handleSharePlay])
 
   const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
 
@@ -1502,6 +1550,8 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
       {!isPresentationMode && (
         <PlaybookRightSidebar
           user={user}
+          profile={profile}
+          isPremium={isPremium}
           onSignOut={handleSignOut}
           playName={playName}
           playType={playType}
@@ -1519,11 +1569,8 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
           onDeletePlay={handleDeletePlay}
           onDuplicatePlay={handleDuplicatePlay}
           onExportPDF={handleExportPDF}
-          onExportVideo={() => {
-            setExportFilename(playName || "playforge-play")
-            setShowExportModal(true)
-          }}
-          onSharePlay={handleSharePlay}
+          onExportVideo={handleOpenExportVideo}
+          onSharePlay={handleOpenSharePlay}
           isSharing={isSharing}
           isExportingVideo={isExportingVideo}
           exportVideoProgress={exportVideoProgress}
@@ -1561,6 +1608,84 @@ export function PlaybookDesigner({ user }: PlaybookDesignerProps) {
               className="w-full px-3 py-1.5 text-xs rounded border border-border hover:bg-muted"
             >
               Close
+            </button>
+          </div>
+        </div>
+      )}
+      {showSaveLimitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-80 rounded-lg border border-border bg-card p-5 shadow-xl">
+            <p className="text-center text-sm text-foreground">
+              You&apos;ve reached the free limit of 3 plays. Upgrade to
+              PlayForge Pro to save unlimited plays.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSaveLimitModal(false)
+                setShowUpgradeModal(true)
+              }}
+              className="mt-4 w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-500"
+            >
+              Upgrade to Pro
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSaveLimitModal(false)}
+              className="mt-2 w-full rounded-lg border border-border py-2 text-sm text-muted-foreground hover:bg-muted"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="w-80 rounded-lg border border-border bg-card p-6 shadow-xl">
+            <div className="mb-3 text-center text-3xl">🏉</div>
+            <h3 className="mb-2 text-center text-base font-bold">
+              Upgrade to PlayForge Pro
+            </h3>
+            <p className="mb-4 text-center text-sm text-muted-foreground">
+              Share plays with your team, export videos, and save unlimited
+              plays.
+            </p>
+            <ul className="mb-4 space-y-2 text-sm">
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Unlimited saved plays
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Share plays via WhatsApp link
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Export animation as MP4 video
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                Cloud backup of all plays
+              </li>
+            </ul>
+            <button
+              type="button"
+              onClick={() => {
+                setShowUpgradeModal(false)
+                alert(
+                  'Stripe payments coming soon! Contact jacques@playforge.co.za to upgrade.'
+                )
+              }}
+              className="mb-2 w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-500"
+            >
+              Upgrade Now
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUpgradeModal(false)}
+              className="w-full rounded-lg border border-border py-2 text-sm text-muted-foreground hover:bg-muted"
+            >
+              Maybe later
             </button>
           </div>
         </div>
