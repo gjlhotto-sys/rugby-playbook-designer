@@ -33,38 +33,49 @@ export default function AdminPage() {
   const loadUsers = useCallback(async () => {
     setLoading(true)
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session?.access_token) {
-      setLoading(false)
-      return
+    try {
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading profiles:', error)
+        setLoading(false)
+        return
+      }
+
+      const { data: plays } = await supabase
+        .from('plays')
+        .select('user_id')
+
+      const playCounts: Record<string, number> = {}
+      plays?.forEach((p) => {
+        if (p.user_id) {
+          playCounts[p.user_id] = (playCounts[p.user_id] ?? 0) + 1
+        }
+      })
+
+      const profileRows = (profiles ?? []) as UserRow[]
+      const usersWithCounts = profileRows.map((p) => ({
+        ...p,
+        play_count: playCounts[p.id] ?? 0,
+      }))
+
+      setUsers(usersWithCounts)
+
+      setStats({
+        total: usersWithCounts.length,
+        admin: usersWithCounts.filter((p) => p.role === 'admin').length,
+        beta: usersWithCounts.filter((p) => p.role === 'beta').length,
+        subscriber: usersWithCounts.filter((p) => p.role === 'subscriber')
+          .length,
+        coach: usersWithCounts.filter((p) => p.role === 'coach').length,
+        totalPlays: plays?.length ?? 0,
+      })
+    } catch (err) {
+      console.error('loadUsers error:', err)
     }
-
-    const res = await fetch('/api/admin/users', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-    if (!res.ok) {
-      setLoading(false)
-      return
-    }
-
-    const payload = (await res.json()) as {
-      users: UserRow[]
-      totalPlays: number
-    }
-    const { users: mergedUsers, totalPlays } = payload
-
-    setUsers(mergedUsers)
-
-    setStats({
-      total: mergedUsers.length,
-      admin: mergedUsers.filter((p) => p.role === 'admin').length,
-      beta: mergedUsers.filter((p) => p.role === 'beta').length,
-      subscriber: mergedUsers.filter((p) => p.role === 'subscriber').length,
-      coach: mergedUsers.filter((p) => p.role === 'coach').length,
-      totalPlays,
-    })
 
     setLoading(false)
   }, [])
