@@ -1,5 +1,3 @@
-import crypto from 'crypto'
-
 const MERCHANT_ID = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_ID!
 const MERCHANT_KEY = process.env.NEXT_PUBLIC_PAYFAST_MERCHANT_KEY!
 const PASSPHRASE = process.env.PAYFAST_PASSPHRASE ?? ''
@@ -9,46 +7,43 @@ export const PAYFAST_URL = IS_SANDBOX
   ? 'https://sandbox.payfast.co.za/eng/process'
   : 'https://www.payfast.co.za/eng/process'
 
-export interface PayFastData {
-  merchant_id: string
-  merchant_key: string
-  return_url: string
-  cancel_url: string
-  notify_url: string
-  name_first: string
-  email_address: string
-  m_payment_id: string
-  amount: string
-  item_name: string
-  subscription_type: string
-  billing_date: string
-  recurring_amount: string
-  frequency: string
-  cycles: string
+function pfParamString(data: Record<string, string>): string {
+  return Object.entries(data)
+    .filter(([key]) => key !== 'merchant_key' && key !== 'signature')
+    .filter(([, val]) => val !== '' && val != null)
+    .map(([key, val]) => `${key}=${val}`)
+    .join('&')
 }
 
-export type PayFastSubmitData = PayFastData & { signature: string }
+function generateSignature(
+  data: Record<string, string>,
+  passphrase: string
+): string {
+  const crypto = require('crypto')
+  let str = pfParamString(data)
+  if (passphrase && passphrase !== '') {
+    str += `&passphrase=${passphrase}`
+  }
+  console.log('String to hash:', str)
+  return crypto.createHash('md5').update(str).digest('hex')
+}
 
 export function generatePayFastForm(
   userEmail: string,
   userName: string,
   userId: string
-): { url: string; data: PayFastSubmitData } {
-  const baseUrl = IS_SANDBOX
-    ? 'https://sandbox.payfast.co.za/eng/process'
-    : 'https://www.payfast.co.za/eng/process'
+): { url: string; data: Record<string, string> } {
+  const today = new Date().toISOString().split('T')[0]
+  const firstName = (userName || 'Coach').split(' ')[0]
 
-  const today = new Date().toISOString().split('T')[0] ?? ''
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '') ?? ''
-
-  const data: PayFastData = {
+  // Parameters MUST be in this exact order for PayFast
+  const data: Record<string, string> = {
     merchant_id: MERCHANT_ID,
     merchant_key: MERCHANT_KEY,
-    return_url: `${siteUrl}/payment/success`,
-    cancel_url: `${siteUrl}/payment/cancel`,
-    notify_url: `${siteUrl}/api/payfast/webhook`,
-    name_first: userName.split(' ')[0] || 'Coach',
+    return_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success`,
+    cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/cancel`,
+    notify_url: `${process.env.NEXT_PUBLIC_SITE_URL}/api/payfast/webhook`,
+    name_first: firstName,
     email_address: userEmail,
     m_payment_id: userId,
     amount: '199.00',
@@ -60,25 +55,17 @@ export function generatePayFastForm(
     cycles: '0',
   }
 
-  const paramString = Object.keys(data)
-    .sort()
-    .map((key) => {
-      const val = data[key as keyof PayFastData]
-      return `${key}=${encodeURIComponent(String(val).trim())}`
-    })
-    .join('&')
+  const signature = generateSignature(data, PASSPHRASE)
 
-  const signatureString = PASSPHRASE.trim()
-    ? `${paramString}&passphrase=${encodeURIComponent(PASSPHRASE.trim())}`
-    : paramString
-
-  const signature = crypto
-    .createHash('md5')
-    .update(signatureString)
-    .digest('hex')
+  console.log('=== PayFast Debug ===')
+  console.log('Merchant ID:', MERCHANT_ID)
+  console.log('Passphrase empty?', PASSPHRASE === '')
+  console.log('Data being sent:', JSON.stringify(data, null, 2))
+  console.log('Signature:', signature)
+  console.log('Full string that was hashed shown above')
 
   return {
-    url: baseUrl,
+    url: PAYFAST_URL,
     data: { ...data, signature },
   }
 }
