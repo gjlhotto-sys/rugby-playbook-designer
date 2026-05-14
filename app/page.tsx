@@ -13,6 +13,13 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingTooLong, setLoadingTooLong] = useState(false)
+
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setLoadingTooLong(true), 6000)
+    return () => clearTimeout(t)
+  }, [loading])
 
   useEffect(() => {
     let cancelled = false
@@ -58,8 +65,20 @@ export default function Home() {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-950">
         <div className="text-center">
-          <div className="mb-2 animate-bounce text-4xl">🏉</div>
+          <div className="text-4xl mb-2 animate-bounce">🏉</div>
           <p className="text-sm text-gray-400">Loading PlayForge...</p>
+          {loadingTooLong && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs text-gray-500">Taking too long?</p>
+              <button
+                type="button"
+                onClick={() => router.push('/login')}
+                className="text-xs text-green-400 hover:text-green-300 underline"
+              >
+                Click here to sign in again
+              </button>
+            </div>
+          )}
         </div>
       </div>
     )
