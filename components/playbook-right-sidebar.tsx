@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile, UserRole } from "@/lib/auth"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,8 @@ interface PlaybookRightSidebarProps {
   profile: UserProfile | null
   isPremium: boolean
   onSignOut: () => void
+  /** Optional slot (e.g. admin link) rendered in the user header area */
+  userHeaderExtra?: ReactNode
   playName: string
   playType: PlayType
   notes: string
@@ -54,6 +56,7 @@ export function PlaybookRightSidebar({
   profile,
   isPremium,
   onSignOut,
+  userHeaderExtra,
   playName,
   playType,
   notes,
@@ -138,24 +141,27 @@ export function PlaybookRightSidebar({
 
   return (
     <aside className="w-[200px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
-      <div className="mb-2 flex shrink-0 items-center justify-between border-b border-border px-2 py-1.5">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span
-            className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium text-white ${badge.color}`}
+      <div className="mb-2 flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1.5">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span
+              className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium text-white ${badge.color}`}
+            >
+              {badge.label}
+            </span>
+            <p className="truncate text-[10px] text-muted-foreground">
+              {user.email}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="flex-shrink-0 rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            {badge.label}
-          </span>
-          <p className="truncate text-[10px] text-muted-foreground">
-            {user.email}
-          </p>
+            Sign out
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="flex-shrink-0 rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          Sign out
-        </button>
+        {userHeaderExtra}
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-3 py-2 border-b border-sidebar-border">

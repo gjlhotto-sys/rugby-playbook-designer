@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
 import { RugbyField, type RugbyFieldHandle } from "./rugby-field"
@@ -27,6 +28,7 @@ interface PlaybookDesignerProps {
 }
 
 export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps) {
+  const router = useRouter()
   const [fieldPlayers, setFieldPlayers] = useState<FieldPlayer[]>([])
   const [arrows, setArrows] = useState<Arrow[]>([])
   const [ball, setBall] = useState<BallToken | null>(null)
@@ -1565,6 +1567,17 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           profile={profile}
           isPremium={isPremium}
           onSignOut={handleSignOut}
+          userHeaderExtra={
+            profile?.role === 'admin' ? (
+              <button
+                type="button"
+                onClick={() => router.push('/admin')}
+                className="text-[10px] text-purple-400 hover:text-purple-300 px-2 py-1 rounded hover:bg-muted transition-colors self-start"
+              >
+                ⚙ Admin
+              </button>
+            ) : null
+          }
           playName={playName}
           playType={playType}
           notes={notes}
