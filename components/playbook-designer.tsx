@@ -1227,55 +1227,17 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     void handleSharePlay()
   }, [isPremium, handleSharePlay])
 
-  const handleUpgrade = useCallback(async () => {
-    try {
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser()
-      if (!authUser) return
-
-      const response = await fetch('/api/payfast/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: authUser.email ?? '',
-          name: profile?.full_name ?? authUser.email ?? '',
-          userId: authUser.id,
-        }),
-      })
-
-      if (!response.ok) {
-        alert('Failed to start checkout. Please try again.')
-        return
-      }
-
-      const payload = (await response.json()) as {
-        url: string
-        data: Record<string, string>
-      }
-      const { url, data } = payload
-
-      setShowUpgradeModal(false)
-
-      const form = document.createElement('form')
-      form.method = 'POST'
-      form.action = url
-
-      Object.entries(data).forEach(([key, value]) => {
-        const input = document.createElement('input')
-        input.type = 'hidden'
-        input.name = key
-        input.value = value
-        form.appendChild(input)
-      })
-
-      document.body.appendChild(form)
-      form.submit()
-    } catch (err) {
-      console.error('Upgrade error:', err)
-      alert('Failed to start checkout. Please try again.')
-    }
-  }, [profile])
+  const handleUpgrade = () => {
+    const subject = encodeURIComponent('PlayForge Pro Upgrade Request')
+    const body = encodeURIComponent(
+      `Hi Jacques,\n\nI would like to upgrade to PlayForge Pro.\n\nMy account email: ${user?.email}\n\nPlease send me payment details.\n\nThank you`
+    )
+    window.open(
+      `mailto:gjlh.otto@gmail.com?subject=${subject}&body=${body}`,
+      '_blank'
+    )
+    setShowUpgradeModal(false)
+  }
 
   const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
 
@@ -1723,8 +1685,11 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               onClick={handleUpgrade}
               className="mb-2 w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-500"
             >
-              Upgrade Now
+              📧 Request Upgrade — R199/month
             </button>
+            <p className="text-[10px] text-gray-400 text-center mt-2">
+              We'll send you payment details within 24 hours
+            </p>
             <button
               type="button"
               onClick={() => setShowUpgradeModal(false)}
