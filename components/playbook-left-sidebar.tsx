@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  BookmarkPlus,
   Cone,
   Tag,
   Plus,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { PlayerTemplate, FieldPlayer } from '@/lib/types'
 import type { FormationId } from '@/lib/play-metadata'
+import { formatFormationOptionLabel, type SavedFormation } from '@/lib/saved-formations'
 import type { SidebarPlacementToken } from './playbook-sidebar'
 
 export type { FormationId }
@@ -85,6 +87,13 @@ interface PlaybookLeftSidebarProps {
   canUndo: boolean
   onLabelTool: () => void
   onConeTool: () => void
+  isLoggedIn?: boolean
+  savedFormations?: SavedFormation[]
+  formationsLoading?: boolean
+  formationDropdownValue?: string
+  onFormationDropdownChange?: (formationId: string) => void
+  onOpenSaveFormation?: () => void
+  onOpenManageFormations?: () => void
 }
 
 const FORMATIONS: { id: FormationId; label: string }[] = [
@@ -115,9 +124,17 @@ export function PlaybookLeftSidebar({
   canUndo,
   onLabelTool,
   onConeTool,
+  isLoggedIn = false,
+  savedFormations = [],
+  formationsLoading = false,
+  formationDropdownValue = '',
+  onFormationDropdownChange,
+  onOpenSaveFormation,
+  onOpenManageFormations,
 }: PlaybookLeftSidebarProps) {
   const attackOnField = fieldPlayers.filter((p) => p.team === 'attack').length
   const defenseOnField = fieldPlayers.filter((p) => p.team === 'defense').length
+  const canSaveFormation = fieldPlayers.length > 0
 
   const applyFormation = (id: FormationId) => {
     onFormationSelect(id)
@@ -185,6 +202,52 @@ export function PlaybookLeftSidebar({
             </button>
           ))}
         </div>
+
+        {isLoggedIn && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={onOpenSaveFormation}
+              disabled={!canSaveFormation}
+              className={`mb-3 flex w-full items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-[11px] font-medium transition-colors ${
+                canSaveFormation
+                  ? 'cursor-pointer border-[#16a34a] bg-[#1f1f1f] text-[#86efac] hover:bg-[#252525]'
+                  : 'cursor-not-allowed border-[#2a2a2a] bg-[#1a1a1a] text-[#555] opacity-60'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" strokeWidth={2} />
+              Save Formation
+            </button>
+
+            <p className="mb-1.5 text-[9px] font-medium uppercase tracking-wider text-[#555]">
+              My Formations
+            </p>
+            <select
+              value={formationDropdownValue}
+              onChange={(e) => onFormationDropdownChange?.(e.target.value)}
+              disabled={formationsLoading}
+              className="w-full rounded-md border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-2 text-[11px] text-[#aaa] focus:outline-none focus:ring-1 focus:ring-[#444] disabled:opacity-60"
+              style={{ borderWidth: '0.5px' }}
+            >
+              <option value="" disabled>
+                {formationsLoading ? 'Loading...' : 'Load a formation...'}
+              </option>
+              {savedFormations.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {formatFormationOptionLabel(f)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={onOpenManageFormations}
+              className="mt-1.5 text-[9px] text-[#555] hover:text-[#888]"
+            >
+              Manage
+            </button>
+          </div>
+        )}
 
         <div
           className="mb-3 border-t border-[#2a2a2a]"

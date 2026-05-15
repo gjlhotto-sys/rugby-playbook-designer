@@ -28,6 +28,17 @@ import {
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
+import {
+  loadFormationsForUser,
+  saveFormationToCloud,
+  deleteFormationFromCloud,
+  preparePlayersForFormationLoad,
+  type SavedFormation,
+} from "@/lib/saved-formations"
+import {
+  ManageFormationsModal,
+  SaveFormationModal,
+} from "./playbook-formation-modals"
 import type { UserProfile } from "@/lib/auth"
 import { hasFullAccess } from "@/lib/auth"
 
@@ -104,6 +115,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [shareCopied, setShareCopied] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [showSaveLimitModal, setShowSaveLimitModal] = useState(false)
+  const [savedFormations, setSavedFormations] = useState<SavedFormation[]>([])
+  const [formationsLoading, setFormationsLoading] = useState(false)
+  const [formationDropdownValue, setFormationDropdownValue] = useState("")
+  const [showSaveFormationModal, setShowSaveFormationModal] = useState(false)
+  const [showManageFormationsModal, setShowManageFormationsModal] = useState(false)
+  const [savingFormation, setSavingFormation] = useState(false)
+  const [deletingFormationId, setDeletingFormationId] = useState<string | null>(null)
   const [startPositions, setStartPositions] = useState<{
     players: Array<{ id: string; x: number; y: number }>
     ball: { x: number; y: number } | null
@@ -148,6 +166,21 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   useEffect(() => {
     void loadCloudPlays()
   }, [loadCloudPlays])
+
+  const loadSavedFormations = useCallback(async () => {
+    if (!user?.id) {
+      setSavedFormations([])
+      return
+    }
+    setFormationsLoading(true)
+    const formations = await loadFormationsForUser()
+    setSavedFormations(formations)
+    setFormationsLoading(false)
+  }, [user?.id])
+
+  useEffect(() => {
+    void loadSavedFormations()
+  }, [loadSavedFormations])
 
   const handleSignOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -1610,6 +1643,93 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
   }, [fieldPlayers.length, arrows.length, ball, currentPhaseView])
 
+  const handleSaveFormation = useCallback(
+    async (name: string) => {
+      setSavingFormation(true)
+      const baseFormation = activeFormation ?? "free-play"
+      const saved = await saveFormationToCloud(name, baseFormation, fieldPlayers)
+      setSavingFormation(false)
+      if (saved) {
+        await loadSavedFormations()
+        return true
+      }
+      return false
+    },
+    [activeFormation, fieldPlayers, loadSavedFormations]
+  )
+
+  const handleLoadSavedFormation = useCallback(
+    (formationId: string) => {
+      const formation = savedFormations.find((f) => f.id === formationId)
+      if (!formation) {
+        setFormationDropdownValue("")
+        return
+      }
+
+      const applyFormation = () => {
+        const players = preparePlayersForFormationLoad(formation.players)
+        setFieldPlayers(players)
+        setActiveFormation(formation.baseFormation)
+        setSelectedPlayerId(null)
+        setFormationDropdownValue("")
+        persistCurrentPhaseSnapshot(currentPhaseView, {
+          players,
+          arrows,
+          ball,
+          cones,
+          labels,
+          phaseMarkers: phases,
+        })
+      }
+
+      if (fieldPlayers.length > 0) {
+        if (
+          !window.confirm(
+            "Loading a formation will replace current players. Continue?"
+          )
+        ) {
+          setFormationDropdownValue("")
+          return
+        }
+      }
+
+      applyFormation()
+    },
+    [
+      savedFormations,
+      fieldPlayers.length,
+      currentPhaseView,
+      arrows,
+      ball,
+      cones,
+      labels,
+      phases,
+      persistCurrentPhaseSnapshot,
+    ]
+  )
+
+  const handleFormationDropdownChange = useCallback(
+    (formationId: string) => {
+      if (!formationId) return
+      setFormationDropdownValue(formationId)
+      handleLoadSavedFormation(formationId)
+    },
+    [handleLoadSavedFormation]
+  )
+
+  const handleDeleteSavedFormation = useCallback(
+    async (id: string) => {
+      if (!window.confirm("Delete this formation?")) return
+      setDeletingFormationId(id)
+      const ok = await deleteFormationFromCloud(id)
+      setDeletingFormationId(null)
+      if (ok) {
+        await loadSavedFormations()
+      }
+    },
+    [loadSavedFormations]
+  )
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
       {!isPresentationMode && (
@@ -1641,6 +1761,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               prev?.type === "cone" ? null : { type: "cone" }
             )
           }
+          isLoggedIn={!!user?.id}
+          savedFormations={savedFormations}
+          formationsLoading={formationsLoading}
+          formationDropdownValue={formationDropdownValue}
+          onFormationDropdownChange={handleFormationDropdownChange}
+          onOpenSaveFormation={() => setShowSaveFormationModal(true)}
+          onOpenManageFormations={() => setShowManageFormationsModal(true)}
         />
       )}
       <main className="flex min-w-0 flex-1 flex-col">
@@ -2132,6 +2259,20 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           </div>
         </div>
       )}
+      <SaveFormationModal
+        open={showSaveFormationModal}
+        baseFormation={activeFormation ?? "free-play"}
+        saving={savingFormation}
+        onClose={() => setShowSaveFormationModal(false)}
+        onSave={handleSaveFormation}
+      />
+      <ManageFormationsModal
+        open={showManageFormationsModal}
+        formations={savedFormations}
+        deletingId={deletingFormationId}
+        onClose={() => setShowManageFormationsModal(false)}
+        onDelete={handleDeleteSavedFormation}
+      />
     </div>
   )
 }
