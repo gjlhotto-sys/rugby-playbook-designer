@@ -93,36 +93,102 @@ export async function loadCloudPlaysForUser(): Promise<SavedPlay[]> {
     .filter((p): p is SavedPlay => p != null)
 }
 
+function logSavePlayError(error: unknown) {
+  console.error('Failed to save play:', JSON.stringify(error, null, 2))
+  const err = error as {
+    message?: string
+    details?: string
+    hint?: string
+    code?: string
+  }
+  console.error('Error message:', err?.message)
+  console.error('Error details:', err?.details)
+  console.error('Error hint:', err?.hint)
+  console.error('Error code:', err?.code)
+}
+
+function isMissingColumnError(
+  error: { code?: string; message?: string } | null,
+  column: string
+): boolean {
+  return (
+    error?.code === 'PGRST204' &&
+    (error.message?.includes(`'${column}'`) ?? false)
+  )
+}
+
+function buildPlayInsertRow(
+  playData: PlayData,
+  userId: string,
+  includeExtendedColumns: boolean
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    name: playData.name,
+    play_type: playData.play_type,
+    notes: playData.notes,
+    players: playData.players,
+    arrows: playData.arrows,
+    ball: playData.ball,
+    phases: playData.phases,
+    cones: playData.cones,
+    labels: playData.labels,
+    team_colors: playData.team_colors,
+    user_id: userId,
+  }
+
+  if (includeExtendedColumns) {
+    row.play_category = playData.play_category ?? playData.play_type
+    row.formation = playData.formation ?? null
+  }
+
+  return row
+}
+
 export async function savePlayToCloud(playData: PlayData): Promise<string | null> {
   try {
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) {
+      console.error('Failed to save play: user is not authenticated')
+      return null
+    }
 
-    const { data, error } = await supabase
-      .from('plays')
-      .insert({
-        name: playData.name,
-        play_type: playData.play_type,
-        play_category: playData.play_category ?? playData.play_type,
-        formation: playData.formation ?? null,
-        notes: playData.notes,
-        players: playData.players,
-        arrows: playData.arrows,
-        ball: playData.ball,
-        phases: playData.phases,
-        cones: playData.cones,
-        labels: playData.labels,
-        team_colors: playData.team_colors,
-        user_id: user?.id ?? null,
-      })
-      .select('share_id')
-      .single()
+    const insertPlay = (row: Record<string, unknown>) =>
+      supabase.from('plays').insert(row).select('share_id').single()
 
-    if (error) throw error
-    return (data as { share_id: string }).share_id
+    let { data, error } = await insertPlay(
+      buildPlayInsertRow(playData, userId, true)
+    )
+
+    if (
+      error &&
+      (isMissingColumnError(error, 'play_category') ||
+        isMissingColumnError(error, 'formation'))
+    ) {
+      console.warn(
+        'plays table missing play_category/formation columns; retrying without them'
+      )
+      ;({ data, error } = await insertPlay(
+        buildPlayInsertRow(playData, userId, false)
+      ))
+    }
+
+    if (error) {
+      logSavePlayError(error)
+      return null
+    }
+
+    const shareId = (data as { share_id?: string } | null)?.share_id
+    if (!shareId) {
+      console.error('Failed to save play: insert succeeded but share_id was missing')
+      return null
+    }
+
+    return shareId
   } catch (err) {
-    console.error('Failed to save play to cloud:', err)
+    logSavePlayError(err)
     return null
   }
 }
