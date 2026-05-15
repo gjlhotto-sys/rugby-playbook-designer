@@ -189,7 +189,10 @@ export function ManageFormationsModal({
                 </div>
                 <button
                   type="button"
-                  onClick={() => void onDelete(f.id)}
+                  onClick={() => {
+                    if (!window.confirm('Delete this formation?')) return
+                    void onDelete(f.id)
+                  }}
                   disabled={deletingId === f.id}
                   className="shrink-0 rounded p-1.5 text-[#dc2626] hover:bg-[#dc2626]/10 disabled:opacity-50"
                   aria-label={`Delete ${f.name}`}

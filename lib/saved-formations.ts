@@ -86,11 +86,17 @@ export async function saveFormationToCloud(
 export async function deleteFormationFromCloud(id: string): Promise<boolean> {
   try {
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return false
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return false
 
-    const { error } = await supabase.from('formations').delete().eq('id', id).eq('user_id', user.id)
+    const { error } = await supabase
+      .from('formations')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('id')
 
     if (error) throw error
     return true

@@ -1717,18 +1717,21 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     [handleLoadSavedFormation]
   )
 
-  const handleDeleteSavedFormation = useCallback(
-    async (id: string) => {
-      if (!window.confirm("Delete this formation?")) return
-      setDeletingFormationId(id)
+  const handleDeleteSavedFormation = useCallback(async (id: string) => {
+    setDeletingFormationId(id)
+    try {
       const ok = await deleteFormationFromCloud(id)
-      setDeletingFormationId(null)
       if (ok) {
-        await loadSavedFormations()
+        setSavedFormations((prev) => prev.filter((f) => f.id !== id))
+        const formations = await loadFormationsForUser()
+        setSavedFormations(formations)
       }
-    },
-    [loadSavedFormations]
-  )
+    } catch (err) {
+      console.error("Failed to delete formation:", err)
+    } finally {
+      setDeletingFormationId(null)
+    }
+  }, [])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
