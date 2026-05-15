@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from '@/lib/supabase'
 import type { FieldPlayer } from './types'
 import type { FormationId } from './play-metadata'
 import { FORMATION_LABELS, parseFormationId } from './play-metadata'

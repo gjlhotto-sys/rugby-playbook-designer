@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from '@/lib/supabase'
 import type {
   FieldPlayer,
   Arrow,
@@ -14,7 +14,14 @@ import { PLAY_TYPES } from './types'
 import type { FormationId, PlayCategory } from './play-metadata'
 import { legacyPlayTypeToPlayCategory, parseFormationId } from './play-metadata'
 
+export interface SavePlayResult {
+  id: string
+  share_id: string
+}
+
 export interface PlayData {
+  /** Supabase `plays.id` — when set, upserts instead of inserting */
+  id?: string
   name: string
   play_type: string
   play_category?: string
@@ -34,8 +41,9 @@ function isPlayType(value: string): value is PlayType {
 }
 
 function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
+  const dbId = typeof row.id === 'string' ? row.id : null
   const shareId = row.share_id != null ? String(row.share_id) : null
-  if (!shareId) return null
+  if (!shareId && !dbId) return null
   const playTypeRaw = typeof row.play_type === 'string' ? row.play_type : 'Free Play'
   const playType: PlayType = isPlayType(playTypeRaw) ? playTypeRaw : 'Free Play'
   const playCategoryRaw =
@@ -47,8 +55,11 @@ function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
     : legacyPlayTypeToPlayCategory(playTypeRaw)
   const formation = parseFormationId(row.formation)
   const teamColors = row.team_colors as TeamColors | undefined
+  const listKey = shareId ?? dbId ?? ''
   return {
-    id: `cloud:${shareId}`,
+    id: `cloud:${listKey}`,
+    cloudRecordId: dbId ?? undefined,
+    shareId: shareId ?? undefined,
     name: typeof row.name === 'string' ? row.name : 'Untitled Play',
     playType,
     playCategory,
@@ -73,14 +84,15 @@ function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
 
 export async function loadCloudPlaysForUser(): Promise<SavedPlay[]> {
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return []
+    data: { session },
+  } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  if (!userId) return []
 
   const { data, error } = await supabase
     .from('plays')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('updated_at', { ascending: false })
 
   if (error || !data) {
@@ -136,6 +148,10 @@ function buildPlayInsertRow(
     user_id: userId,
   }
 
+  if (playData.id) {
+    row.id = playData.id
+  }
+
   if (includeExtendedColumns) {
     row.play_category = playData.play_category ?? playData.play_type
     row.formation = playData.formation ?? null
@@ -144,23 +160,70 @@ function buildPlayInsertRow(
   return row
 }
 
-export async function savePlayToCloud(playData: PlayData): Promise<string | null> {
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const userId = session?.user?.id
-    if (!userId) {
-      console.error('Failed to save play: user is not authenticated')
-      return null
+function assertSupabaseClient() {
+  if (!supabase?.from) {
+    throw new Error('Supabase client is not initialized')
+  }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  )
+}
+
+async function writePlayRow(
+  row: Record<string, unknown>,
+  hasExistingId: boolean
+) {
+  assertSupabaseClient()
+  const table = supabase.from('plays')
+  if (hasExistingId) {
+    return table.upsert(row, { onConflict: 'id' }).select('id, share_id').single()
+  }
+  return table.insert(row).select('id, share_id').single()
+}
+
+export async function savePlayToCloud(
+  playData: PlayData
+): Promise<SavePlayResult | null> {
+  assertSupabaseClient()
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  console.log('savePlayToCloud session userId:', userId)
+
+  if (!userId) {
+    console.error('No active session — cannot save play')
+    return null
+  }
+
+  const existingId =
+    playData.id && isUuid(playData.id) ? playData.id : undefined
+
+  const saveWithExtendedColumns = async (includeExtended: boolean) => {
+    const payload = buildPlayInsertRow(playData, userId, includeExtended)
+    if (existingId) {
+      payload.id = existingId
+    } else {
+      delete payload.id
     }
 
-    const insertPlay = (row: Record<string, unknown>) =>
-      supabase.from('plays').insert(row).select('share_id').single()
+    console.log('Upserting payload:', JSON.stringify(payload))
 
-    let { data, error } = await insertPlay(
-      buildPlayInsertRow(playData, userId, true)
-    )
+    const response = await writePlayRow(payload, Boolean(existingId))
+    console.log('Supabase response:', {
+      data: response.data,
+      error: response.error,
+    })
+
+    return response
+  }
+
+  try {
+    let { data, error } = await saveWithExtendedColumns(true)
 
     if (
       error &&
@@ -170,26 +233,59 @@ export async function savePlayToCloud(playData: PlayData): Promise<string | null
       console.warn(
         'plays table missing play_category/formation columns; retrying without them'
       )
-      ;({ data, error } = await insertPlay(
-        buildPlayInsertRow(playData, userId, false)
-      ))
+      ;({ data, error } = await saveWithExtendedColumns(false))
     }
 
     if (error) {
       logSavePlayError(error)
-      return null
+      throw error
     }
 
+    const id = (data as { id?: string } | null)?.id
     const shareId = (data as { share_id?: string } | null)?.share_id
-    if (!shareId) {
-      console.error('Failed to save play: insert succeeded but share_id was missing')
-      return null
+    if (!id || !shareId) {
+      const missing = new Error(
+        'Save succeeded but Supabase response is missing id or share_id'
+      )
+      console.error(missing.message, data)
+      throw missing
     }
 
-    return shareId
+    return { id, share_id: shareId }
   } catch (err) {
     logSavePlayError(err)
-    return null
+    throw err
+  }
+}
+
+export async function deletePlay(playId: string): Promise<boolean> {
+  if (!playId) return false
+
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) {
+      console.error('No active session — cannot delete play')
+      return false
+    }
+
+    const { error } = await supabase
+      .from('plays')
+      .delete()
+      .eq('id', playId)
+      .eq('user_id', userId)
+
+    if (error) {
+      logSavePlayError(error)
+      return false
+    }
+
+    return true
+  } catch (err) {
+    logSavePlayError(err)
+    return false
   }
 }
 

@@ -80,6 +80,10 @@ export interface PhaseSnapshot {
 
 export interface SavedPlay {
   id: string
+  /** Supabase `plays.id` for cloud-saved plays */
+  cloudRecordId?: string
+  /** Public share token for `/play/[shareId]` */
+  shareId?: string
   name: string
   playType: PlayType
   /** UI chip: Attack / Defence / Set Piece */

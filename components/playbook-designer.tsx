@@ -27,7 +27,13 @@ import {
 } from "@/lib/phase-snapshots"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
-import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
+import {
+  deletePlay,
+  loadCloudPlaysForUser,
+  savePlayToCloud,
+  type PlayData,
+  type SavePlayResult,
+} from "@/lib/play-sharing"
 import {
   loadFormationsForUser,
   saveFormationToCloud,
@@ -1025,7 +1031,40 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setLabels(prev => [...prev, newLabel])
   }, [])
 
-  const handleSavePlay = useCallback(() => {
+  const buildPlayDataForCloud = useCallback((): PlayData => {
+    const currentSnap = buildCanvasSnapshot()
+    const activePlay = [...cloudSavedPlays, ...savedPlays].find(
+      (p) => p.id === activePlayId
+    )
+    return {
+      id: activePlay?.cloudRecordId,
+      name: playName || "Untitled Play",
+      play_type: playType,
+      play_category: playCategory,
+      formation: activeFormation ?? "free-play",
+      notes,
+      players: currentSnap.players,
+      arrows: currentSnap.arrows,
+      ball: currentSnap.ball,
+      phases: currentSnap.phaseMarkers,
+      cones: currentSnap.cones,
+      labels: currentSnap.labels,
+      team_colors: teamColors,
+    }
+  }, [
+    activeFormation,
+    activePlayId,
+    buildCanvasSnapshot,
+    cloudSavedPlays,
+    notes,
+    playCategory,
+    playName,
+    playType,
+    savedPlays,
+    teamColors,
+  ])
+
+  const handleSavePlay = useCallback(async () => {
     if (!isPremium && savedPlays.length >= 3) {
       setShowSaveLimitModal(true)
       return
@@ -1035,27 +1074,91 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       ...phaseSnapshots,
       [currentPhaseView]: currentSnap,
     }
-    const newPlay: SavedPlay = {
-      id: `play-${Date.now()}`,
-      name: playName || "Untitled Play",
-      playType,
-      playCategory,
-      formation: activeFormation ?? "free-play",
-      notes,
-      timestamp: new Date().toISOString(),
-      teamColors,
-      players: currentSnap.players,
-      arrows: currentSnap.arrows,
-      ball: currentSnap.ball,
-      phases: currentSnap.phaseMarkers,
-      cones: currentSnap.cones,
-      labels: currentSnap.labels,
-      phaseSnapshots: allPhaseSnapshots,
-      currentPhase: currentPhaseView,
+
+    let cloudResult: SavePlayResult | null = null
+    if (user?.id) {
+      console.log("Calling savePlayToCloud...")
+      try {
+        cloudResult = await savePlayToCloud(buildPlayDataForCloud())
+        console.log("savePlayToCloud result:", cloudResult)
+      } catch (err) {
+        console.error("savePlayToCloud failed:", err)
+      }
     }
 
+    const newPlay: SavedPlay = cloudResult
+      ? {
+          id: `cloud:${cloudResult.share_id}`,
+          cloudRecordId: cloudResult.id,
+          shareId: cloudResult.share_id,
+          name: playName || "Untitled Play",
+          playType,
+          playCategory,
+          formation: activeFormation ?? "free-play",
+          notes,
+          timestamp: new Date().toISOString(),
+          teamColors,
+          players: currentSnap.players,
+          arrows: currentSnap.arrows,
+          ball: currentSnap.ball,
+          phases: currentSnap.phaseMarkers,
+          cones: currentSnap.cones,
+          labels: currentSnap.labels,
+          phaseSnapshots: allPhaseSnapshots,
+          currentPhase: currentPhaseView,
+        }
+      : {
+          id: `play-${Date.now()}`,
+          name: playName || "Untitled Play",
+          playType,
+          playCategory,
+          formation: activeFormation ?? "free-play",
+          notes,
+          timestamp: new Date().toISOString(),
+          teamColors,
+          players: currentSnap.players,
+          arrows: currentSnap.arrows,
+          ball: currentSnap.ball,
+          phases: currentSnap.phaseMarkers,
+          cones: currentSnap.cones,
+          labels: currentSnap.labels,
+          phaseSnapshots: allPhaseSnapshots,
+          currentPhase: currentPhaseView,
+        }
+
     setPhaseSnapshots(allPhaseSnapshots)
-    setSavedPlays((prev) => [...prev, newPlay])
+
+    if (cloudResult) {
+      setCloudSavedPlays((prev) => {
+        const existingIndex = prev.findIndex(
+          (p) =>
+            p.cloudRecordId === cloudResult.id ||
+            p.id === newPlay.id ||
+            p.shareId === cloudResult.share_id
+        )
+        if (existingIndex >= 0) {
+          const updated = [...prev]
+          updated[existingIndex] = newPlay
+          return updated
+        }
+        return [...prev, newPlay]
+      })
+      setSavedPlays((prev) =>
+        prev.filter(
+          (p) =>
+            p.id !== activePlayId &&
+            p.cloudRecordId !== cloudResult.id &&
+            p.shareId !== cloudResult.share_id &&
+            p.id !== newPlay.id
+        )
+      )
+    } else {
+      setSavedPlays((prev) => {
+        const next = prev.filter((p) => p.id !== activePlayId)
+        return [...next, newPlay]
+      })
+    }
+
     setActivePlayId(newPlay.id)
     setHasUnsavedChanges(false)
     console.log("Saved play:", newPlay)
@@ -1069,8 +1172,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     notes,
     teamColors,
     buildCanvasSnapshot,
+    buildPlayDataForCloud,
     phaseSnapshots,
     currentPhaseView,
+    user?.id,
+    cloudSavedPlays,
+    activePlayId,
   ])
 
   const handleLoadPlay = useCallback(
@@ -1119,10 +1226,53 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     [applyCanvasSnapshot]
   )
 
-  const handleDeletePlay = useCallback((playId: string) => {
-    if (playId.startsWith("cloud:")) return
-    setSavedPlays(prev => prev.filter(p => p.id !== playId))
+  const resetToBlankPlay = useCallback(() => {
+    setPlayName("")
+    setPlayCategory("attack")
+    setActiveFormation(null)
+    setNotes("")
+    setFieldPlayers([])
+    setArrows([])
+    setBall(null)
+    setCones([])
+    setLabels([])
+    setPhases([])
+    setPhaseSnapshots({ 1: createEmptyPhaseSnapshot() })
+    setCurrentPhaseView(1)
+    setActivePlayId(null)
+    setUndoStack([])
+    setSelectedPlayerId(null)
+    setSelectedBall(false)
+    setSelectedArrowId(null)
+    setSelectedPlacementToken(null)
+    setHasUnsavedChanges(false)
+    setShowPhaseCopyBanner(false)
+    fieldRef.current?.reset()
   }, [])
+
+  const handleDeletePlay = useCallback(
+    async (playId: string) => {
+      if (!window.confirm("Delete this play?")) return
+
+      if (playId.startsWith("cloud:")) {
+        const play = cloudSavedPlays.find((p) => p.id === playId)
+        if (!play?.cloudRecordId) {
+          console.error("Cannot delete cloud play: missing database id")
+          return
+        }
+        const ok = await deletePlay(play.cloudRecordId)
+        if (!ok) return
+        setCloudSavedPlays((prev) => prev.filter((p) => p.id !== playId))
+      } else {
+        setSavedPlays((prev) => prev.filter((p) => p.id !== playId))
+      }
+
+      if (activePlayId === playId) {
+        resetToBlankPlay()
+      }
+    },
+    [cloudSavedPlays, activePlayId, resetToBlankPlay]
+  )
 
   const handleDuplicatePlay = useCallback(
     (play: SavedPlay) => {
@@ -1486,44 +1636,34 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setIsSharing(true)
     setShareUrl(null)
 
-    const shareId = await savePlayToCloud({
-      name: playName,
-      play_type: playType,
-      play_category: playCategory,
-      formation: activeFormation ?? "free-play",
-      notes,
-      players: fieldPlayers,
-      arrows,
-      ball,
-      phases,
-      cones,
-      labels,
-      team_colors: teamColors,
-    })
+    try {
+      console.log("Calling savePlayToCloud...")
+      const result = await savePlayToCloud(buildPlayDataForCloud())
+      console.log("savePlayToCloud result:", result)
 
-    if (shareId) {
-      const url = `${window.location.origin}/play/${shareId}`
-      setShareUrl(url)
-      void loadCloudPlays()
-    } else {
-      window.alert('Failed to generate share link. Please try again.')
+      if (result) {
+        const url = `${window.location.origin}/play/${result.share_id}`
+        setShareUrl(url)
+        setActivePlayId(`cloud:${result.share_id}`)
+        setSavedPlays((prev) =>
+          prev.filter(
+            (p) =>
+              p.cloudRecordId !== result.id &&
+              p.shareId !== result.share_id &&
+              p.id !== `cloud:${result.share_id}`
+          )
+        )
+        await loadCloudPlays()
+      } else {
+        window.alert("Failed to generate share link. Please try again.")
+      }
+    } catch (err) {
+      console.error("Share play failed:", err)
+      window.alert("Failed to generate share link. Please try again.")
+    } finally {
+      setIsSharing(false)
     }
-    setIsSharing(false)
-  }, [
-    arrows,
-    ball,
-    cones,
-    fieldPlayers,
-    labels,
-    loadCloudPlays,
-    notes,
-    phases,
-    playName,
-    playType,
-    playCategory,
-    activeFormation,
-    teamColors,
-  ])
+  }, [buildPlayDataForCloud, loadCloudPlays])
 
   const handleOpenExportVideo = useCallback(() => {
     if (!isPremium) {
@@ -2055,7 +2195,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
                 <button
                   type="button"
                   onClick={() => {
-                    handleSavePlay()
+                    void handleSavePlay()
                     setMobileToolsOpen(false)
                   }}
                   className="rounded-lg bg-[#C0392B] px-3 py-2 text-xs text-white"

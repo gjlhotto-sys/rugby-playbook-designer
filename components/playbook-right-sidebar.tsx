@@ -138,7 +138,7 @@ interface PlaybookRightSidebarProps {
     team: 'attack' | 'defense' | 'attackArrow' | 'defenceArrow',
     color: string
   ) => void
-  onSavePlay: () => void
+  onSavePlay: () => void | Promise<void>
   onLoadPlay: (play: SavedPlay) => void
   onDeletePlay: (playId: string) => void
   onDuplicatePlay: (play: SavedPlay) => void
@@ -266,7 +266,7 @@ export function PlaybookRightSidebar({
 
         <button
           type="button"
-          onClick={onSavePlay}
+          onClick={() => void onSavePlay()}
           disabled={!hasContent}
           className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#C0392B] px-2 py-2.5 text-[12px] font-semibold text-white transition-opacity disabled:opacity-40"
         >
@@ -378,31 +378,31 @@ export function PlaybookRightSidebar({
                       })()}
                     </div>
                   </div>
-                  <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
                         onDuplicatePlay(play)
                       }}
-                      className="rounded p-1 text-[#666] hover:bg-[#2a2a2a] hover:text-white"
+                      className="rounded p-1 text-[#666] opacity-0 transition-opacity hover:bg-[#2a2a2a] hover:text-white group-hover:opacity-100"
                       title="Duplicate"
                     >
                       <Copy className="h-3.5 w-3.5" />
                     </button>
-                    {!play.id.startsWith('cloud:') ? (
+                    {(!play.id.startsWith('cloud:') || play.cloudRecordId) && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation()
-                          onDeletePlay(play.id)
+                          void onDeletePlay(play.id)
                         }}
-                        className="rounded p-1 text-[#666] hover:bg-red-900/30 hover:text-red-400"
+                        className="rounded p-1 text-[#f87171] opacity-0 transition-opacity hover:bg-red-900/30 group-hover:opacity-100"
                         title="Delete"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3 w-3" />
                       </button>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               )
