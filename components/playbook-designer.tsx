@@ -20,7 +20,11 @@ import {
   legacyPlayTypeToPlayCategory,
   playCategoryToLegacyPlayType,
 } from "@/lib/play-metadata"
-import { createEmptyPhaseSnapshot, clonePlayersForNextPhase } from "@/lib/phase-snapshots"
+import {
+  createEmptyPhaseSnapshot,
+  clonePlayersForNextPhase,
+  resolvePlayersToArrowEndpoints,
+} from "@/lib/phase-snapshots"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
@@ -1568,8 +1572,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const handleCopyPositionsFromPreviousPhase = useCallback(() => {
     const prev = phaseSnapshots[currentPhaseView - 1]
     if (!prev || prev.players.length === 0) return
+    const playersAtEndpoints = resolvePlayersToArrowEndpoints(
+      prev.players,
+      prev.arrows
+    )
     const newSnap: PhaseSnapshot = {
-      players: clonePlayersForNextPhase(prev.players),
+      players: clonePlayersForNextPhase(playersAtEndpoints),
       arrows: [],
       ball: null,
       cones: [],
