@@ -9,9 +9,10 @@ import {
   Zap,
 } from 'lucide-react'
 import type { PlayerTemplate, FieldPlayer } from '@/lib/types'
+import type { FormationId } from '@/lib/play-metadata'
 import type { SidebarPlacementToken } from './playbook-sidebar'
 
-export type FormationId = 'scrum' | 'lineout' | 'both' | 'kickoff'
+export type { FormationId }
 
 function PlayerToken({
   player,
@@ -44,12 +45,13 @@ function PlayerToken({
       draggable
       onDragStart={handleDragStart}
       onClick={onSelect}
-      className={`flex w-[52px] flex-col items-center gap-0.5 rounded-md p-1 transition-all ${
+      className={`flex w-[40px] flex-col items-center gap-[3px] rounded-md transition-all ${
         selected ? 'ring-1 ring-[#C0392B]' : 'hover:bg-white/5'
       }`}
+      style={{ padding: '2px 8px' }}
     >
       <div
-        className={`flex h-[34px] w-[34px] items-center justify-center rounded-full border text-[11px] font-bold ${
+        className={`flex h-[26px] w-[26px] items-center justify-center rounded-full border text-[9px] font-bold ${
           isAttack
             ? 'border-[#2563eb] bg-[#1a3a6e] text-[#93c5fd]'
             : 'border-[#dc2626] bg-[#6e1a1a] text-[#fca5a5]'
@@ -58,7 +60,7 @@ function PlayerToken({
       >
         {player.number}
       </div>
-      <span className="text-[7px] font-medium text-[#888]">{player.abbr}</span>
+      <span className="text-[6px] font-medium text-[#888]">{player.abbr}</span>
     </button>
   )
 }
@@ -75,6 +77,7 @@ interface PlaybookLeftSidebarProps {
   onApplyLineoutFormation: () => void
   onApplyBothTeamsFormation: () => void
   onApplyKickoffFormation: () => void
+  onApplyFreePlayFormation: () => void
   currentPhase: number
   onPhaseSelect: (phase: number) => void
   onAddPhase: () => void
@@ -89,6 +92,7 @@ const FORMATIONS: { id: FormationId; label: string }[] = [
   { id: 'lineout', label: 'Lineout' },
   { id: 'both', label: 'Both Teams' },
   { id: 'kickoff', label: 'Kickoff' },
+  { id: 'free-play', label: 'Free Play' },
 ]
 
 export function PlaybookLeftSidebar({
@@ -103,6 +107,7 @@ export function PlaybookLeftSidebar({
   onApplyLineoutFormation,
   onApplyBothTeamsFormation,
   onApplyKickoffFormation,
+  onApplyFreePlayFormation,
   currentPhase,
   onPhaseSelect,
   onAddPhase,
@@ -128,6 +133,9 @@ export function PlaybookLeftSidebar({
         break
       case 'kickoff':
         onApplyKickoffFormation()
+        break
+      case 'free-play':
+        onApplyFreePlayFormation()
         break
     }
   }
@@ -165,6 +173,8 @@ export function PlaybookLeftSidebar({
               type="button"
               onClick={() => applyFormation(f.id)}
               className={`rounded-md border px-2 py-2 text-[10px] font-medium transition-colors ${
+                f.id === 'free-play' ? 'col-span-2' : ''
+              } ${
                 activeFormation === f.id
                   ? 'border-[#C0392B] bg-[#C0392B] text-white'
                   : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#aaa] hover:text-white'
@@ -186,7 +196,7 @@ export function PlaybookLeftSidebar({
           <span className="text-[9px] text-[#555]">{attackOnField}/15</span>
         </div>
         <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
-        <div className="mb-2 flex flex-wrap gap-0.5">
+        <div className="mb-2 flex flex-wrap gap-[3px]">
           {attackPlayers
             .filter((p) => p.number <= 8)
             .map((player) => (
@@ -212,7 +222,7 @@ export function PlaybookLeftSidebar({
             ))}
         </div>
         <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
-        <div className="mb-3 flex flex-wrap gap-0.5">
+        <div className="mb-3 flex flex-wrap gap-[3px]">
           {attackPlayers
             .filter((p) => p.number > 8)
             .map((player) => (
@@ -248,7 +258,7 @@ export function PlaybookLeftSidebar({
           <span className="text-[9px] text-[#555]">{defenseOnField}/15</span>
         </div>
         <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
-        <div className="mb-2 flex flex-wrap gap-0.5">
+        <div className="mb-2 flex flex-wrap gap-[3px]">
           {defensePlayers
             .filter((p) => p.number <= 8)
             .map((player) => (
@@ -274,7 +284,7 @@ export function PlaybookLeftSidebar({
             ))}
         </div>
         <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
-        <div className="mb-4 flex flex-wrap gap-0.5">
+        <div className="mb-4 flex flex-wrap gap-[3px]">
           {defensePlayers
             .filter((p) => p.number > 8)
             .map((player) => (

@@ -13,8 +13,14 @@ import { PlaybookDesignStatusBar } from "./playbook-design-status-bar"
 import { PlaybookColorPickerPopover } from "./playbook-color-picker-popover"
 import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
 import { Menu, X } from "lucide-react"
-import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
+import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot } from "@/lib/types"
 import { RUGBY_POSITIONS } from "@/lib/types"
+import type { PlayCategory } from "@/lib/play-metadata"
+import {
+  legacyPlayTypeToPlayCategory,
+  playCategoryToLegacyPlayType,
+} from "@/lib/play-metadata"
+import { createEmptyPhaseSnapshot, clonePlayersForNextPhase } from "@/lib/phase-snapshots"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
@@ -48,8 +54,16 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [passerSelected, setPasserSelected] = useState<string | null>(null)
   const [selectedPlacementToken, setSelectedPlacementToken] = useState<SidebarPlacementToken | null>(null)
   const [playName, setPlayName] = useState("")
-  const [playType, setPlayType] = useState<PlayType>("Free Play")
+  const [playCategory, setPlayCategory] = useState<PlayCategory>("attack")
   const [notes, setNotes] = useState("")
+  const [attackCustomSwatches, setAttackCustomSwatches] = useState<string[]>([])
+  const [defenceCustomSwatches, setDefenceCustomSwatches] = useState<string[]>([])
+  const [phaseSnapshots, setPhaseSnapshots] = useState<Record<number, PhaseSnapshot>>({
+    1: createEmptyPhaseSnapshot(),
+  })
+  const [showPhaseCopyBanner, setShowPhaseCopyBanner] = useState(false)
+  const phasePromptDismissedRef = useRef<Set<number>>(new Set())
+  const phaseManuallyEditedRef = useRef<Set<number>>(new Set())
   const [teamColors, setTeamColors] = useState<TeamColors>({
     attack: "#3B82F6",
     defense: "#EF4444",
@@ -68,6 +82,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     top: number
   } | null>(null)
   const designHydratedRef = useRef(false)
+  const playType: PlayType = playCategoryToLegacyPlayType(playCategory)
   const [isAnimating, setIsAnimating] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState<0.5 | 1 | 2>(1)
@@ -273,23 +288,45 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
   }, [undoStack])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setSelectedPlacementToken(null)
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [])
-
-
   const getFieldCoords = useCallback((xPercent: number, yPercent: number) => ({
     x: BUFFER + FIELD_WIDTH * xPercent,
     y: BUFFER + FIELD_HEIGHT * yPercent,
   }), [])
 
   const getExistingPlayerKey = useCallback((player: FieldPlayer) => `${player.team}-${player.number}`, [])
+
+  const buildCanvasSnapshot = useCallback(
+    (): PhaseSnapshot => ({
+      players: fieldPlayers,
+      arrows,
+      ball,
+      cones,
+      labels,
+      phaseMarkers: phases,
+    }),
+    [fieldPlayers, arrows, ball, cones, labels, phases]
+  )
+
+  const applyCanvasSnapshot = useCallback((snap: PhaseSnapshot) => {
+    setFieldPlayers(snap.players)
+    setArrows(snap.arrows)
+    setBall(snap.ball)
+    setCones(snap.cones)
+    setLabels(snap.labels)
+    setPhases(snap.phaseMarkers)
+    setSelectedPlayerId(null)
+    setSelectedBall(false)
+    setSelectedArrowId(null)
+    setPasserSelected(null)
+  }, [])
+
+  const persistCurrentPhaseSnapshot = useCallback(
+    (phaseNum: number, snap?: PhaseSnapshot) => {
+      const snapshot = snap ?? buildCanvasSnapshot()
+      setPhaseSnapshots((prev) => ({ ...prev, [phaseNum]: snapshot }))
+    },
+    [buildCanvasSnapshot]
+  )
 
   const makePlayerAt = useCallback((team: "attack" | "defense", number: number, x: number, y: number): FieldPlayer => {
     const positionData = RUGBY_POSITIONS.find(p => p.number === number)
@@ -473,6 +510,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       { team: "defense", number: 15, xPercent: 0.500000, yPercent: 0.418182 },
     ])
   }, [applyFormationBatch])
+
+  const handleApplyFreePlayFormation = useCallback(() => {
+    setActiveFormation("free-play")
+  }, [])
 
   const handleApplyScrumFormation = useCallback(() => {
     applyFormationBatch([
@@ -850,6 +891,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setBall(null)
     setCones([])
     setLabels([])
+    setPhases([])
     setSelectedPlayerId(null)
     setSelectedBall(false)
     setSelectedArrowId(null)
@@ -951,21 +993,31 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setShowSaveLimitModal(true)
       return
     }
+    const currentSnap = buildCanvasSnapshot()
+    const allPhaseSnapshots = {
+      ...phaseSnapshots,
+      [currentPhaseView]: currentSnap,
+    }
     const newPlay: SavedPlay = {
       id: `play-${Date.now()}`,
       name: playName || "Untitled Play",
       playType,
+      playCategory,
+      formation: activeFormation ?? "free-play",
       notes,
       timestamp: new Date().toISOString(),
       teamColors,
-      players: fieldPlayers,
-      arrows: arrows,
-      ball,
-      phases,
-      cones,
-      labels,
+      players: currentSnap.players,
+      arrows: currentSnap.arrows,
+      ball: currentSnap.ball,
+      phases: currentSnap.phaseMarkers,
+      cones: currentSnap.cones,
+      labels: currentSnap.labels,
+      phaseSnapshots: allPhaseSnapshots,
+      currentPhase: currentPhaseView,
     }
 
+    setPhaseSnapshots(allPhaseSnapshots)
     setSavedPlays((prev) => [...prev, newPlay])
     setActivePlayId(newPlay.id)
     setHasUnsavedChanges(false)
@@ -975,34 +1027,60 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     savedPlays.length,
     playName,
     playType,
+    playCategory,
+    activeFormation,
     notes,
     teamColors,
-    fieldPlayers,
-    arrows,
-    ball,
-    phases,
-    cones,
-    labels,
+    buildCanvasSnapshot,
+    phaseSnapshots,
+    currentPhaseView,
   ])
 
-  const handleLoadPlay = useCallback((play: SavedPlay) => {
-    setPlayName(play.name)
-    setPlayType(play.playType)
-    setNotes(play.notes || "")
-    setTeamColors(play.teamColors)
-    setFieldPlayers(play.players)
-    setArrows(play.arrows)
-    setBall(play.ball || null)
-    setPhases(play.phases || [])
-    setCones(play.cones || [])
-    setLabels(play.labels || [])
-    setUndoStack([])
-    setSelectedPlayerId(null)
-    setSelectedBall(false)
-    setSelectedArrowId(null)
-    setActivePlayId(play.id)
-    setHasUnsavedChanges(false)
-  }, [])
+  const handleLoadPlay = useCallback(
+    (play: SavedPlay) => {
+      setPlayName(play.name)
+      setPlayCategory(
+        play.playCategory ?? legacyPlayTypeToPlayCategory(play.playType)
+      )
+      setActiveFormation(play.formation ?? null)
+      setNotes(play.notes || "")
+      setTeamColors(play.teamColors)
+      const phase = play.currentPhase ?? 1
+      if (play.phaseSnapshots && Object.keys(play.phaseSnapshots).length > 0) {
+        setPhaseSnapshots(play.phaseSnapshots)
+        setCurrentPhaseView(phase)
+        applyCanvasSnapshot(
+          play.phaseSnapshots[phase] ?? createEmptyPhaseSnapshot()
+        )
+      } else {
+        setPhaseSnapshots({
+          1: {
+            players: play.players,
+            arrows: play.arrows,
+            ball: play.ball ?? null,
+            cones: play.cones ?? [],
+            labels: play.labels ?? [],
+            phaseMarkers: play.phases ?? [],
+          },
+        })
+        setCurrentPhaseView(1)
+        setFieldPlayers(play.players)
+        setArrows(play.arrows)
+        setBall(play.ball || null)
+        setPhases(play.phases || [])
+        setCones(play.cones || [])
+        setLabels(play.labels || [])
+      }
+      setUndoStack([])
+      setSelectedPlayerId(null)
+      setSelectedBall(false)
+      setSelectedArrowId(null)
+      setActivePlayId(play.id)
+      setHasUnsavedChanges(false)
+      setShowPhaseCopyBanner(false)
+    },
+    [applyCanvasSnapshot]
+  )
 
   const handleDeletePlay = useCallback((playId: string) => {
     if (playId.startsWith("cloud:")) return
@@ -1046,6 +1124,34 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     [handleModeChange]
   )
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (toolbarTool === "erase") {
+          setToolbarTool("select")
+          handleModeChange("move")
+        }
+        setSelectedPlacementToken(null)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [toolbarTool, handleModeChange])
+
+  const handleAttackCustomColor = useCallback((color: string) => {
+    setAttackCustomSwatches((prev) =>
+      prev.includes(color) ? prev : [...prev, color]
+    )
+    setTeamColors((prev) => ({ ...prev, attack: color }))
+  }, [])
+
+  const handleDefenceCustomColor = useCallback((color: string) => {
+    setDefenceCustomSwatches((prev) =>
+      prev.includes(color) ? prev : [...prev, color]
+    )
+    setTeamColors((prev) => ({ ...prev, defense: color }))
+  }, [])
+
   const handleCreatePassArrow = useCallback((passerId: string, receiverId: string) => {
     const passer = fieldPlayers.find((p) => p.id === passerId)
     const receiver = fieldPlayers.find((p) => p.id === receiverId)
@@ -1066,12 +1172,16 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setPasserSelected(null)
   }, [fieldPlayers])
 
-  const handleFieldAnimationStateChange = useCallback((playing: boolean) => {
-    setIsAnimating(playing)
-    if (!playing) {
-      setIsPaused(false)
-    }
-  }, [])
+  const handleFieldAnimationStateChange = useCallback(
+    (playing: boolean) => {
+      setIsAnimating(playing)
+      if (!playing) {
+        setIsPaused(false)
+        persistCurrentPhaseSnapshot(currentPhaseView)
+      }
+    },
+    [currentPhaseView, persistCurrentPhaseSnapshot]
+  )
 
   const handleToolbarAnimate = useCallback(() => {
     if (arrows.length === 0) return
@@ -1342,6 +1452,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     const shareId = await savePlayToCloud({
       name: playName,
       play_type: playType,
+      play_category: playCategory,
+      formation: activeFormation ?? "free-play",
       notes,
       players: fieldPlayers,
       arrows,
@@ -1360,7 +1472,21 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       window.alert('Failed to generate share link. Please try again.')
     }
     setIsSharing(false)
-  }, [arrows, ball, cones, fieldPlayers, labels, loadCloudPlays, notes, phases, playName, playType, teamColors])
+  }, [
+    arrows,
+    ball,
+    cones,
+    fieldPlayers,
+    labels,
+    loadCloudPlays,
+    notes,
+    phases,
+    playName,
+    playType,
+    playCategory,
+    activeFormation,
+    teamColors,
+  ])
 
   const handleOpenExportVideo = useCallback(() => {
     if (!isPremium) {
@@ -1397,20 +1523,84 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     ...(phases.length > 0 ? phases.map((p) => p.phase) : [1])
   )
 
+  const switchToPhase = useCallback(
+    (phase: number) => {
+      persistCurrentPhaseSnapshot(currentPhaseView)
+      setCurrentPhaseView(phase)
+      const snap = phaseSnapshots[phase] ?? createEmptyPhaseSnapshot()
+      applyCanvasSnapshot(snap)
+      setSelectedPlacementToken({ type: "phase", phase })
+
+      if (phase > 1) {
+        const isEmpty =
+          snap.players.length === 0 &&
+          snap.arrows.length === 0 &&
+          !snap.ball
+        const dismissed = phasePromptDismissedRef.current.has(phase)
+        const edited = phaseManuallyEditedRef.current.has(phase)
+        setShowPhaseCopyBanner(isEmpty && !dismissed && !edited)
+      } else {
+        setShowPhaseCopyBanner(false)
+      }
+    },
+    [
+      currentPhaseView,
+      phaseSnapshots,
+      persistCurrentPhaseSnapshot,
+      applyCanvasSnapshot,
+    ]
+  )
+
   const handleCyclePhase = () => {
-    setCurrentPhaseView((p) => (p >= totalPhases ? 1 : p + 1))
+    const next = currentPhaseView >= totalPhases ? 1 : currentPhaseView + 1
+    switchToPhase(next)
   }
 
   const handlePhaseSelect = (phase: number) => {
-    setCurrentPhaseView(phase)
-    setSelectedPlacementToken({ type: "phase", phase })
+    switchToPhase(phase)
   }
 
   const handleAddPhase = () => {
     const next = currentPhaseView >= 5 ? 1 : currentPhaseView + 1
-    setCurrentPhaseView(next)
-    setSelectedPlacementToken({ type: "phase", phase: next })
+    switchToPhase(next)
   }
+
+  const handleCopyPositionsFromPreviousPhase = useCallback(() => {
+    const prev = phaseSnapshots[currentPhaseView - 1]
+    if (!prev || prev.players.length === 0) return
+    const newSnap: PhaseSnapshot = {
+      players: clonePlayersForNextPhase(prev.players),
+      arrows: [],
+      ball: null,
+      cones: [],
+      labels: [],
+      phaseMarkers: [],
+    }
+    applyCanvasSnapshot(newSnap)
+    persistCurrentPhaseSnapshot(currentPhaseView, newSnap)
+    phaseManuallyEditedRef.current.add(currentPhaseView)
+    setShowPhaseCopyBanner(false)
+  }, [
+    currentPhaseView,
+    phaseSnapshots,
+    applyCanvasSnapshot,
+    persistCurrentPhaseSnapshot,
+  ])
+
+  const handleStartFreshPhase = useCallback(() => {
+    phasePromptDismissedRef.current.add(currentPhaseView)
+    setShowPhaseCopyBanner(false)
+  }, [currentPhaseView])
+
+  useEffect(() => {
+    if (
+      currentPhaseView > 1 &&
+      (fieldPlayers.length > 0 || arrows.length > 0 || ball !== null)
+    ) {
+      phaseManuallyEditedRef.current.add(currentPhaseView)
+      setShowPhaseCopyBanner(false)
+    }
+  }, [fieldPlayers.length, arrows.length, ball, currentPhaseView])
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
@@ -1427,6 +1617,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           onApplyLineoutFormation={handleApplyLineoutFormation}
           onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
           onApplyKickoffFormation={handleApplyKickoffFormation}
+          onApplyFreePlayFormation={handleApplyFreePlayFormation}
           currentPhase={currentPhaseView}
           onPhaseSelect={handlePhaseSelect}
           onAddPhase={handleAddPhase}
@@ -1467,7 +1658,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
         <div
           ref={fieldContainerRef}
-          className="relative min-h-0 flex-1 bg-[#0f0f0f] p-2"
+          className={`relative min-h-0 flex-1 bg-[#0f0f0f] p-2 ${
+            toolbarTool === "erase" ? "cursor-crosshair" : ""
+          }`}
           onMouseDown={(e) => {
             if (zoom <= 1) return
             if (e.altKey || e.button === 1) {
@@ -1559,8 +1752,37 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             onTextLabelCreate={handleTextLabelCreate}
             animationSpeed={animationSpeed}
             onAnimationStateChange={handleFieldAnimationStateChange}
+            eraseMode={toolbarTool === "erase"}
             />
           </div>
+          {showPhaseCopyBanner && currentPhaseView > 1 ? (
+            <div
+              className="pointer-events-auto absolute left-1/2 top-3 z-50 flex -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-lg border border-[#4a3a9a] bg-[#1a1a2a] px-4 py-2.5"
+              style={{ borderWidth: "0.5px" }}
+            >
+              <p className="text-[11px] text-[#c4b5fd]">
+                Phase {currentPhaseView} is empty — Copy end positions from Phase{" "}
+                {currentPhaseView - 1}?
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyPositionsFromPreviousPhase}
+                  className="rounded-md bg-[#4a3a9a] px-3 py-1 text-[10px] font-medium text-white"
+                >
+                  Copy Positions
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartFreshPhase}
+                  className="rounded-md border border-[#4a3a9a] bg-transparent px-3 py-1 text-[10px] font-medium text-[#c4b5fd]"
+                  style={{ borderWidth: "0.5px" }}
+                >
+                  Start Fresh
+                </button>
+              </div>
+            </div>
+          ) : null}
           {toolbarTool === "select" &&
           mode === "move" &&
           selectionPopoverPos &&
@@ -1726,10 +1948,14 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           onSignOut={handleSignOut}
           playName={playName}
           activePlayId={activePlayId}
-          playType={playType}
+          playCategory={playCategory}
+          attackCustomSwatches={attackCustomSwatches}
+          defenceCustomSwatches={defenceCustomSwatches}
           notes={notes}
           onPlayNameChange={setPlayName}
-          onPlayTypeChange={setPlayType}
+          onPlayCategoryChange={setPlayCategory}
+          onAttackCustomColor={handleAttackCustomColor}
+          onDefenceCustomColor={handleDefenceCustomColor}
           onNotesChange={setNotes}
           fieldPlayers={fieldPlayers}
           teamColors={teamColors}

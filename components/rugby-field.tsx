@@ -81,6 +81,7 @@ interface RugbyFieldProps {
   /** When true, hides the in-field Play/Pause/Reset toolbar (e.g. shared play view with external controls). */
   hideControls?: boolean
   onAnimationStateChange?: (playing: boolean) => void
+  eraseMode?: boolean
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -138,6 +139,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   animationSpeed = 1,
   hideControls = false,
   onAnimationStateChange,
+  eraseMode = false,
 }: RugbyFieldProps, ref) {
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
@@ -924,6 +926,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const handlePlayerMouseDown = useCallback((e: React.MouseEvent, player: FieldPlayer) => {
     e.stopPropagation()
     if (e.button !== 0) return
+
+    if (eraseMode) {
+      onDeletePlayer(player.id)
+      return
+    }
     
     if (mode === "draw") {
       if (arrowType === "pass") {
@@ -1069,7 +1076,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -1134,6 +1141,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const handleBallMouseDown = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     if (e.button !== 0 || !ball) return
+
+    if (eraseMode) {
+      onDeleteBall()
+      return
+    }
     
     if (mode === "draw") {
       onPlayerSelect(null)
@@ -1178,11 +1190,18 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, ball, mode, selectedBall, onBallSelect, onPlayerSelect, onBallDragStart, onBallDrag, onBallDragEnd, onArrowSelect])
+  }, [getCanvasCoordinates, ball, mode, eraseMode, onDeleteBall, selectedBall, onBallSelect, onPlayerSelect, onBallDragStart, onBallDrag, onBallDragEnd, onArrowSelect])
 
   const handlePhaseMouseDown = useCallback((e: React.MouseEvent, phase: PhaseMarker) => {
     e.stopPropagation()
-    if (e.button !== 0 || mode !== "move") return
+    if (e.button !== 0) return
+
+    if (eraseMode) {
+      onDeletePhase(phase.id)
+      return
+    }
+
+    if (mode !== "move") return
 
     onArrowSelect(null)
     onPhaseDragStart(phase.id)
@@ -1218,11 +1237,18 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, mode, onPhaseDragStart, onPhaseDrag, onPhaseDragEnd, onArrowSelect])
+  }, [getCanvasCoordinates, mode, eraseMode, onDeletePhase, onPhaseDragStart, onPhaseDrag, onPhaseDragEnd, onArrowSelect])
 
   const handleConeMouseDown = useCallback((e: React.MouseEvent, cone: ConeMarker) => {
     e.stopPropagation()
-    if (e.button !== 0 || mode !== "move") return
+    if (e.button !== 0) return
+
+    if (eraseMode) {
+      onDeleteCone(cone.id)
+      return
+    }
+
+    if (mode !== "move") return
 
     onArrowSelect(null)
     onConeDragStart(cone.id)
@@ -1258,11 +1284,18 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, mode, onConeDragStart, onConeDrag, onConeDragEnd, onArrowSelect])
+  }, [getCanvasCoordinates, mode, eraseMode, onDeleteCone, onConeDragStart, onConeDrag, onConeDragEnd, onArrowSelect])
 
   const handleLabelMouseDown = useCallback((e: React.MouseEvent, label: TextLabel) => {
     e.stopPropagation()
-    if (e.button !== 0 || mode !== "move") return
+    if (e.button !== 0) return
+
+    if (eraseMode) {
+      onDeleteLabel(label.id)
+      return
+    }
+
+    if (mode !== "move") return
 
     onArrowSelect(null)
     onLabelDragStart(label.id)
@@ -1298,17 +1331,21 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     
     window.addEventListener("mousemove", handleMouseMove)
     window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, mode, onLabelDragStart, onLabelDrag, onLabelDragEnd, onArrowSelect])
+  }, [getCanvasCoordinates, mode, eraseMode, onDeleteLabel, onLabelDragStart, onLabelDrag, onLabelDragEnd, onArrowSelect])
 
   // Arrow click handler for selection in move mode
   const handleArrowClick = useCallback((e: React.MouseEvent, arrow: Arrow) => {
     e.stopPropagation()
+    if (eraseMode) {
+      onArrowDelete(arrow.id)
+      return
+    }
     if (mode !== "move") return
     
     onPlayerSelect(null)
     onBallSelect(false)
     onArrowSelect(selectedArrowId === arrow.id ? null : arrow.id)
-  }, [mode, selectedArrowId, onArrowSelect, onPlayerSelect, onBallSelect])
+  }, [eraseMode, mode, selectedArrowId, onArrowSelect, onArrowDelete, onPlayerSelect, onBallSelect])
 
   // Arrow handle dragging
   const handleArrowHandleMouseDown = useCallback((e: React.MouseEvent, arrow: Arrow, handleType: "start" | "mid" | "end") => {

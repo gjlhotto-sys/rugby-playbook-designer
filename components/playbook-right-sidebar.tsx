@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Copy,
@@ -13,16 +14,81 @@ import {
 } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import type { UserProfile } from '@/lib/auth'
-import type { FieldPlayer, TeamColors, SavedPlay, PlayType } from '@/lib/types'
+import type { FieldPlayer, TeamColors, SavedPlay } from '@/lib/types'
+import type { PlayCategory } from '@/lib/play-metadata'
+import {
+  FORMATION_LABELS,
+  PLAY_CATEGORY_COLORS,
+  PLAY_CATEGORY_LABELS,
+  legacyPlayTypeToPlayCategory,
+} from '@/lib/play-metadata'
 
 const ATTACK_SWATCHES = ['#3B82F6', '#2563EB', '#1D4ED8', '#60A5FA', '#93C5FD']
 const DEFENCE_SWATCHES = ['#EF4444', '#DC2626', '#B91C1C', '#F87171', '#FCA5A5']
 
-const PLAY_TYPE_CHIPS: { label: string; value: PlayType }[] = [
-  { label: 'Attack', value: 'Backline Move' },
-  { label: 'Defence', value: 'Free Play' },
-  { label: 'Set Piece', value: 'Lineout' },
+const PLAY_TYPE_CHIPS: { label: string; value: PlayCategory }[] = [
+  { label: 'Attack', value: 'attack' },
+  { label: 'Defence', value: 'defence' },
+  { label: 'Set Piece', value: 'set-piece' },
 ]
+
+function TeamColourRow({
+  label,
+  presetSwatches,
+  customSwatches,
+  activeColor,
+  onSelectColor,
+  onAddCustomColor,
+}: {
+  label: string
+  presetSwatches: string[]
+  customSwatches: string[]
+  activeColor: string
+  onSelectColor: (color: string) => void
+  onAddCustomColor: (color: string) => void
+}) {
+  const colorInputRef = useRef<HTMLInputElement>(null)
+  const allSwatches = [...presetSwatches, ...customSwatches]
+
+  return (
+    <div className="mb-1 flex items-center justify-between gap-2">
+      <span className="text-[10px] text-[#888]">{label}</span>
+      <div className="flex flex-wrap items-center justify-end gap-1">
+        {allSwatches.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onSelectColor(c)}
+            className="h-4 w-4 rounded-md transition-transform hover:scale-110"
+            style={{
+              backgroundColor: c,
+              border:
+                activeColor.toLowerCase() === c.toLowerCase()
+                  ? '1.5px solid white'
+                  : '1px solid #333',
+            }}
+            aria-label={`${label} colour ${c}`}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => colorInputRef.current?.click()}
+          className="flex h-4 w-4 items-center justify-center rounded-md border border-dashed border-[#555] text-[10px] text-[#666] hover:border-[#888] hover:text-[#aaa]"
+          aria-label={`Add custom ${label.toLowerCase()} colour`}
+        >
+          +
+        </button>
+        <input
+          ref={colorInputRef}
+          type="color"
+          className="sr-only"
+          onChange={(e) => onAddCustomColor(e.target.value)}
+          aria-hidden
+        />
+      </div>
+    </div>
+  )
+}
 
 function PlayThumbnail({ play }: { play: SavedPlay }) {
   const scale = 36 / 70
@@ -49,23 +115,20 @@ function PlayThumbnail({ play }: { play: SavedPlay }) {
   )
 }
 
-function playTypeTagColor(playType: PlayType): string {
-  if (playType === 'Backline Move' || playType === 'Kick-off') return '#60a5fa'
-  if (playType === 'Lineout' || playType === 'Scrum') return '#4ade80'
-  if (playType === 'Penalty' || playType === 'Restart') return '#f87171'
-  return '#9ca3af'
-}
-
 interface PlaybookRightSidebarProps {
   user: User
   profile: UserProfile | null
   isPremium: boolean
   playName: string
-  playType: PlayType
+  playCategory: PlayCategory
+  attackCustomSwatches: string[]
+  defenceCustomSwatches: string[]
   notes: string
   activePlayId: string | null
   onPlayNameChange: (name: string) => void
-  onPlayTypeChange: (type: PlayType) => void
+  onPlayCategoryChange: (category: PlayCategory) => void
+  onAttackCustomColor: (color: string) => void
+  onDefenceCustomColor: (color: string) => void
   onNotesChange: (notes: string) => void
   fieldPlayers: FieldPlayer[]
   teamColors: TeamColors
@@ -95,11 +158,15 @@ export function PlaybookRightSidebar({
   profile,
   isPremium,
   playName,
-  playType,
+  playCategory,
+  attackCustomSwatches,
+  defenceCustomSwatches,
   notes,
   activePlayId,
   onPlayNameChange,
-  onPlayTypeChange,
+  onPlayCategoryChange,
+  onAttackCustomColor,
+  onDefenceCustomColor,
   onNotesChange,
   fieldPlayers,
   teamColors,
@@ -143,9 +210,9 @@ export function PlaybookRightSidebar({
             <button
               key={chip.label}
               type="button"
-              onClick={() => onPlayTypeChange(chip.value)}
+              onClick={() => onPlayCategoryChange(chip.value)}
               className={`rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
-                playType === chip.value
+                playCategory === chip.value
                   ? 'border-[#C0392B] bg-[#C0392B] text-white'
                   : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-white'
               }`}
@@ -159,49 +226,23 @@ export function PlaybookRightSidebar({
         <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
           Team colours
         </p>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="text-[10px] text-[#888]">Attack</span>
-          <div className="flex gap-1">
-            {ATTACK_SWATCHES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => onTeamColorChange('attack', c)}
-                className="h-[18px] w-[18px] rounded-md transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: c,
-                  border:
-                    teamColors.attack.toLowerCase() === c.toLowerCase()
-                      ? '1.5px solid white'
-                      : '1px solid #333',
-                }}
-                aria-label={`Attack colour ${c}`}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <span className="text-[10px] text-[#888]">Defence</span>
-          <div className="flex gap-1">
-            {DEFENCE_SWATCHES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => onTeamColorChange('defense', c)}
-                className="h-[18px] w-[18px] rounded-md transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: c,
-                  border:
-                    teamColors.defense.toLowerCase() === c.toLowerCase()
-                      ? '1.5px solid white'
-                      : '1px solid #333',
-                }}
-                aria-label={`Defence colour ${c}`}
-              />
-            ))}
-          </div>
-        </div>
-
+        <TeamColourRow
+          label="Attack"
+          presetSwatches={ATTACK_SWATCHES}
+          customSwatches={attackCustomSwatches}
+          activeColor={teamColors.attack}
+          onSelectColor={(c) => onTeamColorChange('attack', c)}
+          onAddCustomColor={onAttackCustomColor}
+        />
+        <TeamColourRow
+          label="Defence"
+          presetSwatches={DEFENCE_SWATCHES}
+          customSwatches={defenceCustomSwatches}
+          activeColor={teamColors.defense}
+          onSelectColor={(c) => onTeamColorChange('defense', c)}
+          onAddCustomColor={onDefenceCustomColor}
+        />
+        <div className="mb-3" />
         <p className="mb-1.5 text-[9px] font-medium uppercase tracking-wider text-[#666]">
           Coaching notes
         </p>
@@ -316,12 +357,26 @@ export function PlaybookRightSidebar({
                       {play.name}
                       {play.id.startsWith('cloud:') ? ' ☁' : ''}
                     </p>
-                    <p
-                      className="text-[9px] font-medium"
-                      style={{ color: playTypeTagColor(play.playType) }}
-                    >
-                      {play.playType}
-                    </p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[9px] font-medium text-[#666]">
+                        {FORMATION_LABELS[
+                          play.formation ?? 'free-play'
+                        ] ?? 'Free Play'}
+                      </span>
+                      {(() => {
+                        const category =
+                          play.playCategory ??
+                          legacyPlayTypeToPlayCategory(play.playType)
+                        return (
+                          <span
+                            className="text-[9px] font-medium"
+                            style={{ color: PLAY_CATEGORY_COLORS[category] }}
+                          >
+                            {PLAY_CATEGORY_LABELS[category]}
+                          </span>
+                        )
+                      })()}
+                    </div>
                   </div>
                   <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button

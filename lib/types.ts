@@ -1,3 +1,5 @@
+import type { FormationId, PlayCategory } from './play-metadata'
+
 export interface PlayerTemplate {
   number: number
   position: string
@@ -67,10 +69,23 @@ export interface TeamColors {
 
 export type PlayType = "Lineout" | "Scrum" | "Backline Move" | "Kick-off" | "Restart" | "Penalty" | "Free Play"
 
+export interface PhaseSnapshot {
+  players: FieldPlayer[]
+  arrows: Arrow[]
+  ball: BallToken | null
+  cones: ConeMarker[]
+  labels: TextLabel[]
+  phaseMarkers: PhaseMarker[]
+}
+
 export interface SavedPlay {
   id: string
   name: string
   playType: PlayType
+  /** UI chip: Attack / Defence / Set Piece */
+  playCategory?: PlayCategory
+  /** Formation selected in left panel at save time */
+  formation?: FormationId | null
   notes: string
   timestamp: string
   teamColors: TeamColors
@@ -80,6 +95,8 @@ export interface SavedPlay {
   phases: PhaseMarker[]
   cones: ConeMarker[]
   labels: TextLabel[]
+  phaseSnapshots?: Record<number, PhaseSnapshot>
+  currentPhase?: number
 }
 
 export type UndoAction =

@@ -11,10 +11,14 @@ import type {
   PlayType,
 } from './types'
 import { PLAY_TYPES } from './types'
+import type { FormationId, PlayCategory } from './play-metadata'
+import { legacyPlayTypeToPlayCategory, parseFormationId } from './play-metadata'
 
 export interface PlayData {
   name: string
   play_type: string
+  play_category?: string
+  formation?: string | null
   notes: string
   players: FieldPlayer[]
   arrows: Arrow[]
@@ -34,11 +38,21 @@ function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
   if (!shareId) return null
   const playTypeRaw = typeof row.play_type === 'string' ? row.play_type : 'Free Play'
   const playType: PlayType = isPlayType(playTypeRaw) ? playTypeRaw : 'Free Play'
+  const playCategoryRaw =
+    typeof row.play_category === 'string'
+      ? row.play_category
+      : legacyPlayTypeToPlayCategory(playTypeRaw)
+  const playCategory = ['attack', 'defence', 'set-piece'].includes(playCategoryRaw)
+    ? (playCategoryRaw as PlayCategory)
+    : legacyPlayTypeToPlayCategory(playTypeRaw)
+  const formation = parseFormationId(row.formation)
   const teamColors = row.team_colors as TeamColors | undefined
   return {
     id: `cloud:${shareId}`,
     name: typeof row.name === 'string' ? row.name : 'Untitled Play',
     playType,
+    playCategory,
+    formation,
     notes: typeof row.notes === 'string' ? row.notes : '',
     timestamp:
       typeof row.updated_at === 'string'
@@ -90,6 +104,8 @@ export async function savePlayToCloud(playData: PlayData): Promise<string | null
       .insert({
         name: playData.name,
         play_type: playData.play_type,
+        play_category: playData.play_category ?? playData.play_type,
+        formation: playData.formation ?? null,
         notes: playData.notes,
         players: playData.players,
         arrows: playData.arrows,
