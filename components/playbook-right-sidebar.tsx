@@ -1,34 +1,69 @@
-"use client"
+'use client'
 
-import { useState, type ReactNode } from "react"
-import type { User } from "@supabase/supabase-js"
-import type { UserProfile, UserRole } from "@/lib/auth"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Trash2, Save, Copy } from "lucide-react"
-import type { FieldPlayer, TeamColors, SavedPlay, PlayType } from "@/lib/types"
-import { PLAY_TYPES, PLAY_TYPE_COLORS } from "@/lib/types"
+import { useRouter } from 'next/navigation'
+import {
+  Copy,
+  FileType,
+  Save,
+  Share2,
+  Shield,
+  Sparkles,
+  Trash2,
+  Video,
+} from 'lucide-react'
+import type { User } from '@supabase/supabase-js'
+import type { UserProfile } from '@/lib/auth'
+import type { FieldPlayer, TeamColors, SavedPlay, PlayType } from '@/lib/types'
 
-const roleBadge: Record<
-  UserRole,
-  { label: string; color: string }
-> = {
-  admin: { label: "Admin", color: "bg-purple-600" },
-  beta: { label: "Beta", color: "bg-green-600" },
-  subscriber: { label: "Pro", color: "bg-blue-600" },
-  coach: { label: "Free", color: "bg-gray-600" },
+const ATTACK_SWATCHES = ['#3B82F6', '#2563EB', '#1D4ED8', '#60A5FA', '#93C5FD']
+const DEFENCE_SWATCHES = ['#EF4444', '#DC2626', '#B91C1C', '#F87171', '#FCA5A5']
+
+const PLAY_TYPE_CHIPS: { label: string; value: PlayType }[] = [
+  { label: 'Attack', value: 'Backline Move' },
+  { label: 'Defence', value: 'Free Play' },
+  { label: 'Set Piece', value: 'Lineout' },
+]
+
+function PlayThumbnail({ play }: { play: SavedPlay }) {
+  const scale = 36 / 70
+  const h = 26
+  return (
+    <svg
+      width={36}
+      height={h}
+      viewBox="0 0 36 26"
+      className="shrink-0 rounded border border-[#2a2a2a] bg-[#14532d]"
+      style={{ borderWidth: '0.5px' }}
+    >
+      <rect x="1" y="1" width="34" height="24" fill="#166534" rx="1" />
+      {play.players.slice(0, 8).map((p, i) => (
+        <circle
+          key={p.id ?? i}
+          cx={4 + (p.x * scale) % 30}
+          cy={4 + (p.y / 110) * 18}
+          r="1.8"
+          fill={p.team === 'attack' ? '#3b82f6' : '#ef4444'}
+        />
+      ))}
+    </svg>
+  )
+}
+
+function playTypeTagColor(playType: PlayType): string {
+  if (playType === 'Backline Move' || playType === 'Kick-off') return '#60a5fa'
+  if (playType === 'Lineout' || playType === 'Scrum') return '#4ade80'
+  if (playType === 'Penalty' || playType === 'Restart') return '#f87171'
+  return '#9ca3af'
 }
 
 interface PlaybookRightSidebarProps {
   user: User
   profile: UserProfile | null
   isPremium: boolean
-  onSignOut: () => void
-  /** Optional slot (e.g. admin link) rendered in the user header area */
-  userHeaderExtra?: ReactNode
   playName: string
   playType: PlayType
   notes: string
+  activePlayId: string | null
   onPlayNameChange: (name: string) => void
   onPlayTypeChange: (type: PlayType) => void
   onNotesChange: (notes: string) => void
@@ -36,7 +71,10 @@ interface PlaybookRightSidebarProps {
   teamColors: TeamColors
   savedPlays: SavedPlay[]
   cloudSavedPlays: SavedPlay[]
-  onTeamColorChange: (team: "attack" | "defense" | "attackArrow" | "defenceArrow", color: string) => void
+  onTeamColorChange: (
+    team: 'attack' | 'defense' | 'attackArrow' | 'defenceArrow',
+    color: string
+  ) => void
   onSavePlay: () => void
   onLoadPlay: (play: SavedPlay) => void
   onDeletePlay: (playId: string) => void
@@ -49,17 +87,17 @@ interface PlaybookRightSidebarProps {
   exportVideoProgress: number
   canExportVideo: boolean
   onGenerateNotes: () => void
+  onSignOut: () => void
 }
 
 export function PlaybookRightSidebar({
   user,
   profile,
   isPremium,
-  onSignOut,
-  userHeaderExtra,
   playName,
   playType,
   notes,
+  activePlayId,
   onPlayNameChange,
   onPlayTypeChange,
   onNotesChange,
@@ -80,367 +118,256 @@ export function PlaybookRightSidebar({
   exportVideoProgress,
   canExportVideo,
   onGenerateNotes,
+  onSignOut,
 }: PlaybookRightSidebarProps) {
-  const effectiveRole = profile?.role ?? "coach"
-  const badge = roleBadge[effectiveRole]
-
-  const [attackArrowPickerOpen, setAttackArrowPickerOpen] = useState(false)
-  const [defenceArrowPickerOpen, setDefenceArrowPickerOpen] = useState(false)
-  const [tempAttackArrowColor, setTempAttackArrowColor] = useState(teamColors.attackArrow ?? teamColors.attack)
-  const [tempDefenceArrowColor, setTempDefenceArrowColor] = useState(teamColors.defenceArrow ?? teamColors.defense)
-  const [arrowColorWarning, setArrowColorWarning] = useState<string | null>(null)
-
-  const attackOnField = fieldPlayers.filter((p) => p.team === "attack").length
+  const router = useRouter()
   const hasContent = fieldPlayers.length > 0
-
-  const getHue = (hex: string) => {
-    const r = Number.parseInt(hex.slice(1, 3), 16) / 255
-    const g = Number.parseInt(hex.slice(3, 5), 16) / 255
-    const b = Number.parseInt(hex.slice(5, 7), 16) / 255
-    const max = Math.max(r, g, b)
-    const min = Math.min(r, g, b)
-    const d = max - min
-    if (d === 0) return 0
-    let h = 0
-    if (max === r) h = ((g - b) / d) % 6
-    else if (max === g) h = (b - r) / d + 2
-    else h = (r - g) / d + 4
-    const hue = h * 60
-    return hue < 0 ? hue + 360 : hue
-  }
-
-  const hueDistance = (a: number, b: number) => {
-    const raw = Math.abs(a - b)
-    return Math.min(raw, 360 - raw)
-  }
-
-  const isReservedArrowColor = (color: string) => {
-    const hue = getHue(color.toLowerCase())
-    const yellowHue = getHue("#EAB308")
-    const orangeHue = getHue("#F97316")
-
-    if (hueDistance(hue, yellowHue) <= 20) {
-      return "Yellow is reserved for passes"
-    }
-    if (hueDistance(hue, orangeHue) <= 20) {
-      return "Orange is reserved for kicks"
-    }
-    return null
-  }
-
-  const applyArrowColor = (team: "attackArrow" | "defenceArrow", color: string, close: () => void) => {
-    const warning = isReservedArrowColor(color)
-    if (warning) {
-      setArrowColorWarning(warning)
-      return
-    }
-    setArrowColorWarning(null)
-    onTeamColorChange(team, color)
-    close()
-  }
+  const allPlays = [...savedPlays, ...cloudSavedPlays]
 
   return (
-    <aside className="w-[200px] bg-sidebar border-l border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
-      <div className="mb-2 flex shrink-0 flex-col gap-1 border-b border-border px-2 py-1.5">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={`flex-shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium text-white ${badge.color}`}
+    <aside
+      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-l border-[#2a2a2a] bg-[#161616] lg:flex"
+      style={{ borderLeftWidth: '0.5px' }}
+    >
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <input
+          type="text"
+          value={playName}
+          onChange={(e) => onPlayNameChange(e.target.value)}
+          placeholder="e.g. Blindside Blitz..."
+          className="mb-2 w-full rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-2.5 py-2 text-[12px] text-white placeholder:text-[#555] focus:border-[#C0392B] focus:outline-none"
+          style={{ borderWidth: '0.5px' }}
+        />
+        <div className="mb-4 flex flex-wrap gap-1">
+          {PLAY_TYPE_CHIPS.map((chip) => (
+            <button
+              key={chip.label}
+              type="button"
+              onClick={() => onPlayTypeChange(chip.value)}
+              className={`rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
+                playType === chip.value
+                  ? 'border-[#C0392B] bg-[#C0392B] text-white'
+                  : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-white'
+              }`}
+              style={{ borderWidth: '0.5px' }}
             >
-              {badge.label}
-            </span>
-            <p className="truncate text-[10px] text-muted-foreground">
-              {user.email}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onSignOut}
-            className="flex-shrink-0 rounded px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            Sign out
-          </button>
-        </div>
-        {userHeaderExtra}
-      </div>
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-3 py-2 border-b border-sidebar-border">
-          <h1 className="text-[11px] font-bold text-foreground">PlayForge</h1>
-          <p className="text-[9px] text-muted-foreground">Rugby Playbook Designer</p>
+              {chip.label}
+            </button>
+          ))}
         </div>
 
-        <div className="px-3 py-2 border-b border-sidebar-border space-y-2">
-          <div>
-            <label className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1 block">Play Name</label>
-            <Input value={playName} onChange={(e) => onPlayNameChange(e.target.value)} placeholder="Enter play name..." className="h-8 text-sm px-2" />
-          </div>
-          <div>
-            <label className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1 block">Play Type</label>
-            <select
-              value={playType}
-              onChange={(e) => onPlayTypeChange(e.target.value as PlayType)}
-              className="w-full h-8 text-sm px-2 rounded-md border border-input bg-background text-foreground"
-            >
-              {PLAY_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[9px] uppercase tracking-wider text-muted-foreground block">Notes</label>
-              <Button
-                onClick={onGenerateNotes}
-                size="sm"
-                disabled={attackOnField === 0}
-                title="AI generates coaching notes based on your drawn play"
-                className="h-7 px-2 text-[10px] bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50"
-              >
-                📋 Generate Notes
-              </Button>
-            </div>
-            <textarea
-              value={notes}
-              onChange={(e) => onNotesChange(e.target.value)}
-              placeholder="Coaching cues, call words..."
-              className="w-full h-24 text-sm px-2 py-2 rounded-md border border-input bg-background text-foreground resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="px-3 py-2 border-b border-sidebar-border space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] text-muted-foreground">Attack Color</label>
-            <input
-              type="color"
-              value={teamColors.attack}
-              onChange={(e) => onTeamColorChange("attack", e.target.value)}
-              className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] text-muted-foreground">Defence Color</label>
-            <input
-              type="color"
-              value={teamColors.defense}
-              onChange={(e) => onTeamColorChange("defense", e.target.value)}
-              className="w-6 h-6 rounded cursor-pointer border-0 bg-transparent"
-            />
-          </div>
-
-          <div className="border-t border-sidebar-border my-2" />
-
-          <div className="relative">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-muted-foreground">Attack Arrow Color</span>
+        <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          Team colours
+        </p>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-[10px] text-[#888]">Attack</span>
+          <div className="flex gap-1">
+            {ATTACK_SWATCHES.map((c) => (
               <button
-                className="w-6 h-6 rounded border border-border"
-                style={{ background: teamColors.attackArrow ?? teamColors.attack }}
-                onClick={() => {
-                  setTempAttackArrowColor(teamColors.attackArrow ?? teamColors.attack)
-                  setArrowColorWarning(null)
-                  setAttackArrowPickerOpen(true)
+                key={c}
+                type="button"
+                onClick={() => onTeamColorChange('attack', c)}
+                className="h-[18px] w-[18px] rounded-md transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: c,
+                  border:
+                    teamColors.attack.toLowerCase() === c.toLowerCase()
+                      ? '1.5px solid white'
+                      : '1px solid #333',
                 }}
+                aria-label={`Attack colour ${c}`}
               />
-            </div>
-            {attackArrowPickerOpen && (
-              <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-md p-2 shadow-lg min-w-[140px]">
-                <input type="color" value={tempAttackArrowColor} onChange={(e) => setTempAttackArrowColor(e.target.value)} className="w-full h-8 cursor-pointer rounded" />
-                <div className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1">
-                  <span>Preview</span>
-                  <span className="inline-block w-3 h-3 rounded border border-border" style={{ background: tempAttackArrowColor }} />
-                </div>
-                {arrowColorWarning && <div className="text-[10px] text-amber-400 mt-1">{arrowColorWarning}</div>}
-                <div className="flex gap-1 mt-2">
-                  <button className="flex-1 text-[11px] py-1 bg-primary text-primary-foreground rounded" onClick={() => applyArrowColor("attackArrow", tempAttackArrowColor, () => setAttackArrowPickerOpen(false))}>
-                    Apply
-                  </button>
-                  <button
-                    className="flex-1 text-[11px] py-1 bg-muted rounded"
-                    onClick={() => {
-                      setArrowColorWarning(null)
-                      setAttackArrowPickerOpen(false)
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+            ))}
           </div>
-
-          <div className="relative">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] text-muted-foreground">Defence Arrow Color</span>
+        </div>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <span className="text-[10px] text-[#888]">Defence</span>
+          <div className="flex gap-1">
+            {DEFENCE_SWATCHES.map((c) => (
               <button
-                className="w-6 h-6 rounded border border-border"
-                style={{ background: teamColors.defenceArrow ?? teamColors.defense }}
-                onClick={() => {
-                  setTempDefenceArrowColor(teamColors.defenceArrow ?? teamColors.defense)
-                  setArrowColorWarning(null)
-                  setDefenceArrowPickerOpen(true)
+                key={c}
+                type="button"
+                onClick={() => onTeamColorChange('defense', c)}
+                className="h-[18px] w-[18px] rounded-md transition-transform hover:scale-110"
+                style={{
+                  backgroundColor: c,
+                  border:
+                    teamColors.defense.toLowerCase() === c.toLowerCase()
+                      ? '1.5px solid white'
+                      : '1px solid #333',
                 }}
+                aria-label={`Defence colour ${c}`}
               />
-            </div>
-            {defenceArrowPickerOpen && (
-              <div className="absolute right-0 z-50 mt-1 bg-card border border-border rounded-md p-2 shadow-lg min-w-[140px]">
-                <input type="color" value={tempDefenceArrowColor} onChange={(e) => setTempDefenceArrowColor(e.target.value)} className="w-full h-8 cursor-pointer rounded" />
-                <div className="mt-1 text-[10px] text-muted-foreground flex items-center gap-1">
-                  <span>Preview</span>
-                  <span className="inline-block w-3 h-3 rounded border border-border" style={{ background: tempDefenceArrowColor }} />
-                </div>
-                {arrowColorWarning && <div className="text-[10px] text-amber-400 mt-1">{arrowColorWarning}</div>}
-                <div className="flex gap-1 mt-2">
-                  <button className="flex-1 text-[11px] py-1 bg-primary text-primary-foreground rounded" onClick={() => applyArrowColor("defenceArrow", tempDefenceArrowColor, () => setDefenceArrowPickerOpen(false))}>
-                    Apply
-                  </button>
-                  <button
-                    className="flex-1 text-[11px] py-1 bg-muted rounded"
-                    onClick={() => {
-                      setArrowColorWarning(null)
-                      setDefenceArrowPickerOpen(false)
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
+            ))}
           </div>
         </div>
 
-        <div className="px-3 py-2 border-b border-sidebar-border space-y-2">
-          <Button onClick={onSavePlay} size="sm" className="w-full h-8 text-sm bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!hasContent}>
-            <Save className="w-4 h-4 mr-2" />
-            Save
-          </Button>
-          <Button onClick={onExportPDF} size="sm" variant="secondary" className="w-full h-8 text-sm justify-start px-3" disabled={!hasContent} title="Export as PDF">
-            📄 Export PDF
-          </Button>
-          <button
-            type="button"
-            onClick={onExportVideo}
-            disabled={
-              isExportingVideo || (isPremium && !canExportVideo)
-            }
-            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm rounded-md bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed ${!isPremium ? "opacity-75" : ""}`}
-            title="Export animation as video"
-          >
-            {isExportingVideo ? (
-              <>
-                <span className="animate-spin">⟳</span>
-                Exporting... {exportVideoProgress}%
-              </>
-            ) : isPremium ? (
-              <>🎬 Export Video (MP4)</>
-            ) : (
-              <>🎬 Export Video (MP4) 🔒</>
-            )}
-          </button>
-          <p className="text-[11px] text-muted-foreground text-center">Exports as MP4 — plays in WhatsApp</p>
-          <button
-            type="button"
-            onClick={onSharePlay}
-            disabled={isSharing || (isPremium && fieldPlayers.length === 0)}
-            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-md bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 disabled:cursor-not-allowed ${!isPremium ? "opacity-75" : ""}`}
-          >
-            {isSharing ? (
-              <><span className="animate-spin">⟳</span> Generating link...</>
-            ) : isPremium ? (
-              <>🔗 Share Play</>
-            ) : (
-              <>🔗 Share Play 🔒</>
-            )}
-          </button>
-        </div>
+        <p className="mb-1.5 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          Coaching notes
+        </p>
+        <textarea
+          value={notes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder="Call words, cues, key reads..."
+          className="mb-2 h-16 w-full resize-none rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] px-2 py-1.5 text-[11px] text-white placeholder:text-[#555] focus:border-[#C0392B] focus:outline-none"
+          style={{ borderWidth: '0.5px' }}
+        />
+        <button
+          type="button"
+          onClick={onGenerateNotes}
+          disabled={fieldPlayers.filter((p) => p.team === 'attack').length === 0}
+          className="mb-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#4a3a9a] bg-[#1a1230] px-2 py-2 text-[11px] font-medium text-[#a78bfa] transition-opacity disabled:opacity-40"
+          style={{ borderWidth: '0.5px' }}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Generate notes with AI
+        </button>
 
-        <div className="px-3 py-2">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-foreground">My Plays</h2>
-          </div>
-          {savedPlays.length === 0 && cloudSavedPlays.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">No saved plays yet.</p>
+        <button
+          type="button"
+          onClick={onSavePlay}
+          disabled={!hasContent}
+          className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#C0392B] px-2 py-2.5 text-[12px] font-semibold text-white transition-opacity disabled:opacity-40"
+        >
+          <Save className="h-4 w-4" />
+          Save Play
+        </button>
+        <button
+          type="button"
+          onClick={onExportVideo}
+          disabled={isExportingVideo || (isPremium && !canExportVideo)}
+          className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#16a34a] bg-[#1a2a1a] px-2 py-2.5 text-[12px] font-medium text-[#86efac] disabled:opacity-40 ${!isPremium ? 'opacity-75' : ''}`}
+          style={{ borderWidth: '0.5px' }}
+        >
+          {isExportingVideo ? (
+            <>Exporting… {exportVideoProgress}%</>
           ) : (
-            <div className="space-y-1">
-              {savedPlays.map((play) => (
-                <div
-                  key={play.id}
-                  className="group flex items-center gap-2 p-2 rounded bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => onLoadPlay(play)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] text-foreground truncate font-medium">{play.name}</span>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium text-white" style={{ backgroundColor: PLAY_TYPE_COLORS[play.playType] }}>
-                      {play.playType}
-                    </span>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDuplicatePlay(play)
-                      }}
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                      title="Duplicate play"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDeletePlay(play.id)
-                      }}
-                      className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-                      title="Delete play"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {cloudSavedPlays.map((play) => (
-                <div
-                  key={play.id}
-                  className="group flex items-center gap-2 p-2 rounded bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => onLoadPlay(play)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-[11px]" title="Saved in cloud">
-                        ☁️
-                      </span>
-                      <span className="text-[12px] text-foreground truncate font-medium">{play.name}</span>
-                    </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium text-white" style={{ backgroundColor: PLAY_TYPE_COLORS[play.playType] }}>
-                      {play.playType}
-                    </span>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onDuplicatePlay(play)
-                      }}
-                      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
-                      title="Duplicate to this device"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <>
+              <Video className="h-4 w-4" />
+              Export MP4{!isPremium ? ' 🔒' : ''}
+            </>
           )}
-        </div>
+        </button>
+        <button
+          type="button"
+          onClick={onSharePlay}
+          disabled={isSharing || (isPremium && fieldPlayers.length === 0)}
+          className={`mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#2563eb] bg-[#0f1e3a] px-2 py-2.5 text-[12px] font-medium text-[#93c5fd] disabled:opacity-40 ${!isPremium ? 'opacity-75' : ''}`}
+          style={{ borderWidth: '0.5px' }}
+        >
+          <Share2 className="h-4 w-4" />
+          {isSharing ? 'Sharing…' : `Share Play${!isPremium ? ' 🔒' : ''}`}
+        </button>
+        <button
+          type="button"
+          onClick={onExportPDF}
+          disabled={!hasContent}
+          className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-2.5 text-[12px] font-medium text-[#aaa] hover:text-white disabled:opacity-40"
+          style={{ borderWidth: '0.5px' }}
+        >
+          <FileType className="h-4 w-4" />
+          Export PDF
+        </button>
+
+        {profile?.role === 'admin' ? (
+          <>
+            <div
+              className="mb-3 border-t border-[#2a2a2a]"
+              style={{ borderTopWidth: '0.5px' }}
+            />
+            <button
+              type="button"
+              onClick={() => router.push('/admin')}
+              className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-[#6d28d9] bg-[#1f1230] px-2 py-2.5 text-[12px] font-medium text-[#c4b5fd]"
+              style={{ borderWidth: '0.5px' }}
+            >
+              <Shield className="h-4 w-4" />
+              Admin Dashboard
+            </button>
+          </>
+        ) : null}
+
+        <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          My plays
+        </p>
+        {allPlays.length === 0 ? (
+          <p className="text-[10px] text-[#555]">No saved plays yet.</p>
+        ) : (
+          <div className="space-y-0">
+            {allPlays.map((play) => {
+              const isActive = activePlayId === play.id
+              return (
+                <div
+                  key={play.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onLoadPlay(play)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') onLoadPlay(play)
+                  }}
+                  className={`group flex cursor-pointer items-center gap-2 border-b border-[#2a2a2a] py-2 pr-1 transition-colors hover:bg-[#1a1a1a] ${
+                    isActive ? 'border-l-2 border-l-[#C0392B] bg-[#1a1a1a] pl-2' : 'pl-2.5'
+                  }`}
+                  style={{ borderBottomWidth: '0.5px' }}
+                >
+                  <PlayThumbnail play={play} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-medium text-white">
+                      {play.name}
+                      {play.id.startsWith('cloud:') ? ' ☁' : ''}
+                    </p>
+                    <p
+                      className="text-[9px] font-medium"
+                      style={{ color: playTypeTagColor(play.playType) }}
+                    >
+                      {play.playType}
+                    </p>
+                  </div>
+                  <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDuplicatePlay(play)
+                      }}
+                      className="rounded p-1 text-[#666] hover:bg-[#2a2a2a] hover:text-white"
+                      title="Duplicate"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    {!play.id.startsWith('cloud:') ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onDeletePlay(play.id)
+                        }}
+                        className="rounded p-1 text-[#666] hover:bg-red-900/30 hover:text-red-400"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div
+        className="shrink-0 border-t border-[#2a2a2a] px-3 py-2"
+        style={{ borderTopWidth: '0.5px' }}
+      >
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="w-full text-center text-[10px] text-[#555] hover:text-[#aaa]"
+        >
+          Sign out
+        </button>
       </div>
     </aside>
   )
 }
-

@@ -6,11 +6,15 @@ import type { User } from "@supabase/supabase-js"
 import { supabase } from "@/lib/supabase"
 import { RugbyField, type RugbyFieldHandle } from "./rugby-field"
 import { type SidebarPlacementToken } from "./playbook-sidebar"
-import { PlaybookLeftSidebar } from "./playbook-left-sidebar"
+import { PlaybookLeftSidebar, type FormationId } from "./playbook-left-sidebar"
 import { PlaybookRightSidebar } from "./playbook-right-sidebar"
-import { Move, Pencil, Undo2, ChevronDown } from "lucide-react"
+import { PlaybookDesignToolbar, type ToolbarTool } from "./playbook-design-toolbar"
+import { PlaybookDesignStatusBar } from "./playbook-design-status-bar"
+import { PlaybookColorPickerPopover } from "./playbook-color-picker-popover"
+import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
+import { Menu, X } from "lucide-react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
-import { RUGBY_POSITIONS, ARROW_TYPES } from "@/lib/types"
+import { RUGBY_POSITIONS } from "@/lib/types"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import { loadCloudPlaysForUser, savePlayToCloud } from "@/lib/play-sharing"
@@ -40,6 +44,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
   const [mode, setMode] = useState<InteractionMode>("move")
   const [arrowType, setArrowType] = useState<ArrowType>("run")
+  const [arrowColor, setArrowColor] = useState("#2563eb")
   const [passerSelected, setPasserSelected] = useState<string | null>(null)
   const [selectedPlacementToken, setSelectedPlacementToken] = useState<SidebarPlacementToken | null>(null)
   const [playName, setPlayName] = useState("")
@@ -52,7 +57,17 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [undoStack, setUndoStack] = useState<UndoAction[]>([])
   const [savedPlays, setSavedPlays] = useState<SavedPlay[]>([])
   const [cloudSavedPlays, setCloudSavedPlays] = useState<SavedPlay[]>([])
-  const [arrowDropdownOpen, setArrowDropdownOpen] = useState(false)
+  const [toolbarTool, setToolbarTool] = useState<ToolbarTool>("select")
+  const [activeFormation, setActiveFormation] = useState<FormationId | null>(null)
+  const [currentPhaseView, setCurrentPhaseView] = useState(1)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [activePlayId, setActivePlayId] = useState<string | null>(null)
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  const [selectionPopoverPos, setSelectionPopoverPos] = useState<{
+    left: number
+    top: number
+  } | null>(null)
+  const designHydratedRef = useRef(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState<0.5 | 1 | 2>(1)
@@ -133,14 +148,24 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [undoStack])
 
-  // Close arrow dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = () => setArrowDropdownOpen(false)
-    if (arrowDropdownOpen) {
-      document.addEventListener("click", handleClickOutside)
-      return () => document.removeEventListener("click", handleClickOutside)
+    if (!designHydratedRef.current) {
+      designHydratedRef.current = true
+      return
     }
-  }, [arrowDropdownOpen])
+    setHasUnsavedChanges(true)
+  }, [
+    fieldPlayers,
+    arrows,
+    ball,
+    phases,
+    cones,
+    labels,
+    playName,
+    playType,
+    notes,
+    teamColors,
+  ])
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -697,16 +722,6 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     // No-op for now; retained for RugbyField contract.
   }, [])
 
-  const handlePlayerSelect = useCallback((playerId: string | null) => {
-    setSelectedPlayerId(playerId)
-    if (playerId) setSelectedBall(false)
-  }, [])
-
-  const handleBallSelect = useCallback((selected: boolean) => {
-    setSelectedBall(selected)
-    if (selected) setSelectedPlayerId(null)
-  }, [])
-
   const handleFieldClick = useCallback((x: number, y: number) => {
     if (selectedPlacementToken) {
       if (selectedPlacementToken.type === "player") {
@@ -764,6 +779,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
         toX: x,
         toY: y,
         arrowType,
+        ...(arrowType !== "pass" && arrowType !== "kick" ? { color: arrowColor } : {}),
       }
 
       setArrows(prev => [...prev, newArrow])
@@ -785,7 +801,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setUndoStack(prev => [...prev, { type: "add_arrow", arrow: newArrow }])
       setSelectedBall(false)
     }
-  }, [selectedPlacementToken, mode, selectedPlayerId, selectedBall, fieldPlayers, ball, arrowType, makePlayerAt])
+  }, [selectedPlacementToken, mode, selectedPlayerId, selectedBall, fieldPlayers, ball, arrowType, arrowColor, makePlayerAt])
 
   const handleDeletePlayer = useCallback((playerId: string) => {
     setFieldPlayers(prev => prev.filter(p => p.id !== playerId))
@@ -822,10 +838,16 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   }, [])
 
   const handleClearField = useCallback(() => {
+    if (
+      !window.confirm(
+        "Clear all players, arrows and tokens from the field?"
+      )
+    ) {
+      return
+    }
     setFieldPlayers([])
     setArrows([])
     setBall(null)
-    setPhases([])
     setCones([])
     setLabels([])
     setSelectedPlayerId(null)
@@ -837,11 +859,35 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setHasCompletedAnimation(false)
     setStartPositions(null)
     setUndoStack([])
+    fieldRef.current?.reset()
   }, [])
 
-  const handleArrowSelect = useCallback((arrowId: string | null) => {
-    setSelectedArrowId(arrowId)
-  }, [])
+  const handlePlayerSelect = useCallback(
+    (playerId: string | null) => {
+      if (toolbarTool === "erase" && playerId) {
+        handleDeletePlayer(playerId)
+        return
+      }
+      setSelectedPlayerId(playerId)
+      if (playerId) {
+        setSelectedBall(false)
+        setSelectedArrowId(null)
+      }
+    },
+    [toolbarTool, handleDeletePlayer]
+  )
+
+  const handleBallSelect = useCallback(
+    (selected: boolean) => {
+      if (toolbarTool === "erase" && selected) {
+        handleDeleteBall()
+        return
+      }
+      setSelectedBall(selected)
+      if (selected) setSelectedPlayerId(null)
+    },
+    [toolbarTool, handleDeleteBall]
+  )
 
   const handleArrowUpdate = useCallback((arrowId: string, updates: Partial<Arrow>) => {
     setArrows(prev =>
@@ -851,10 +897,33 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     )
   }, [])
 
+  const handlePlayerColorChange = useCallback((playerId: string, color: string) => {
+    setFieldPlayers(prev =>
+      prev.map(p => (p.id === playerId ? { ...p, color } : p))
+    )
+  }, [])
+
+  const handleSelectedArrowColorChange = useCallback((color: string) => {
+    if (!selectedArrowId) return
+    handleArrowUpdate(selectedArrowId, { color })
+  }, [selectedArrowId, handleArrowUpdate])
+
   const handleArrowDelete = useCallback((arrowId: string) => {
     setArrows(prev => prev.filter(arrow => arrow.id !== arrowId))
     setSelectedArrowId(prev => (prev === arrowId ? null : prev))
   }, [])
+
+  const handleArrowSelect = useCallback(
+    (arrowId: string | null) => {
+      if (toolbarTool === "erase" && arrowId) {
+        handleArrowDelete(arrowId)
+        return
+      }
+      setSelectedArrowId(arrowId)
+      if (arrowId) setSelectedPlayerId(null)
+    },
+    [toolbarTool, handleArrowDelete]
+  )
 
   const handleArrowTypeChange = useCallback((arrowId: string, newType: ArrowType) => {
     setArrows(prev =>
@@ -898,6 +967,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
 
     setSavedPlays((prev) => [...prev, newPlay])
+    setActivePlayId(newPlay.id)
+    setHasUnsavedChanges(false)
     console.log("Saved play:", newPlay)
   }, [
     isPremium,
@@ -929,6 +1000,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setSelectedPlayerId(null)
     setSelectedBall(false)
     setSelectedArrowId(null)
+    setActivePlayId(play.id)
+    setHasUnsavedChanges(false)
   }, [])
 
   const handleDeletePlay = useCallback((playId: string) => {
@@ -961,6 +1034,18 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setPasserSelected(null)
   }, [])
 
+  const handleToolbarToolChange = useCallback(
+    (tool: ToolbarTool) => {
+      setToolbarTool(tool)
+      if (tool === "draw") {
+        handleModeChange("draw")
+      } else {
+        handleModeChange("move")
+      }
+    },
+    [handleModeChange]
+  )
+
   const handleCreatePassArrow = useCallback((passerId: string, receiverId: string) => {
     const passer = fieldPlayers.find((p) => p.id === passerId)
     const receiver = fieldPlayers.find((p) => p.id === receiverId)
@@ -981,32 +1066,44 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setPasserSelected(null)
   }, [fieldPlayers])
 
-  const handlePlayAnimation = useCallback(() => {
+  const handleFieldAnimationStateChange = useCallback((playing: boolean) => {
+    setIsAnimating(playing)
+    if (!playing) {
+      setIsPaused(false)
+    }
+  }, [])
+
+  const handleToolbarAnimate = useCallback(() => {
     if (arrows.length === 0) return
-    const animatingPlayers = fieldPlayers.filter((p) =>
-      arrows.some((a) => a.playerId === p.id)
-    )
-    if (animatingPlayers.length === 0) {
-      window.alert("Draw movement arrows first before playing")
+    if (isAnimating) {
+      fieldRef.current?.pause()
+      setIsAnimating(false)
       return
     }
-    if (!startPositions || hasCompletedAnimation) {
-      setStartPositions({
-        players: fieldPlayers.map((p) => ({ id: p.id, x: p.x, y: p.y })),
-        ball: ball ? { x: ball.x, y: ball.y } : null,
-      })
-    }
-    setHasCompletedAnimation(false)
-    setIsPaused(false)
+    fieldRef.current?.play()
     setIsAnimating(true)
-  }, [arrows, startPositions, hasCompletedAnimation, fieldPlayers, ball])
+  }, [arrows.length, isAnimating])
+
+  const handlePlayAnimation = useCallback(() => {
+    if (arrows.length === 0) return
+    fieldRef.current?.play()
+    setIsAnimating(true)
+  }, [arrows.length])
 
   const handlePauseAnimation = useCallback(() => {
-    setIsPaused(true)
+    fieldRef.current?.pause()
     setIsAnimating(false)
+    setIsPaused(true)
+  }, [])
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1)
+    setPanX(0)
+    setPanY(0)
   }, [])
 
   const handleResetAnimation = useCallback(() => {
+    fieldRef.current?.reset()
     if (startPositions) {
       setFieldPlayers((prev) =>
         prev.map((p) => {
@@ -1028,6 +1125,59 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setIsPaused(false)
     setHasCompletedAnimation(true)
   }, [])
+
+  const selectedPlayer = selectedPlayerId
+    ? fieldPlayers.find((p) => p.id === selectedPlayerId) ?? null
+    : null
+  const selectedArrow = selectedArrowId
+    ? arrows.find((a) => a.id === selectedArrowId) ?? null
+    : null
+
+  const getArrowDisplayColor = useCallback(
+    (arrow: Arrow) => {
+      if (arrow.color) return arrow.color
+      if (arrow.arrowType === "pass") return "#EAB308"
+      if (arrow.arrowType === "kick") return "#F97316"
+      if (arrow.team === "attack") return teamColors.attackArrow ?? teamColors.attack
+      return teamColors.defenceArrow ?? teamColors.defense
+    },
+    [teamColors]
+  )
+
+  useEffect(() => {
+    if (toolbarTool !== "select" || mode !== "move") {
+      setSelectionPopoverPos(null)
+      return
+    }
+
+    const updatePosition = () => {
+      if (selectedPlayer) {
+        const pos = getFieldCanvasScreenPoint(selectedPlayer.x, selectedPlayer.y)
+        if (pos) {
+          setSelectionPopoverPos({ left: pos.left + 14, top: pos.top - 10 })
+        }
+        return
+      }
+      if (selectedArrow) {
+        const midX = (selectedArrow.fromX + selectedArrow.toX) / 2
+        const midY = (selectedArrow.fromY + selectedArrow.toY) / 2
+        const pos = getFieldCanvasScreenPoint(midX, midY)
+        if (pos) {
+          setSelectionPopoverPos({ left: pos.left + 14, top: pos.top - 10 })
+        }
+        return
+      }
+      setSelectionPopoverPos(null)
+    }
+
+    updatePosition()
+    window.addEventListener("resize", updatePosition)
+    window.addEventListener("scroll", updatePosition, true)
+    return () => {
+      window.removeEventListener("resize", updatePosition)
+      window.removeEventListener("scroll", updatePosition, true)
+    }
+  }, [toolbarTool, mode, selectedPlayer, selectedArrow])
 
   const handleEnterPresentation = useCallback(async () => {
     try {
@@ -1241,185 +1391,83 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setShowUpgradeModal(false)
   }
 
-  const selectedArrowType = ARROW_TYPES.find(a => a.type === arrowType)
+  const totalPhases = Math.max(
+    5,
+    currentPhaseView,
+    ...(phases.length > 0 ? phases.map((p) => p.phase) : [1])
+  )
+
+  const handleCyclePhase = () => {
+    setCurrentPhaseView((p) => (p >= totalPhases ? 1 : p + 1))
+  }
+
+  const handlePhaseSelect = (phase: number) => {
+    setCurrentPhaseView(phase)
+    setSelectedPlacementToken({ type: "phase", phase })
+  }
+
+  const handleAddPhase = () => {
+    const next = currentPhaseView >= 5 ? 1 : currentPhaseView + 1
+    setCurrentPhaseView(next)
+    setSelectedPlacementToken({ type: "phase", phase: next })
+  }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
       {!isPresentationMode && (
         <PlaybookLeftSidebar
           attackPlayers={RUGBY_POSITIONS}
           defensePlayers={RUGBY_POSITIONS}
           fieldPlayers={fieldPlayers}
-          ball={ball}
-          cones={cones}
-          teamColors={teamColors}
           selectedPlacementToken={selectedPlacementToken}
           onSelectPlacementToken={setSelectedPlacementToken}
-          onApplyAttackFormation={handleApplyAttackFormation}
-          onApplyDefenseFormation={handleApplyDefenseFormation}
-          onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
-          onApplyLineoutFormation={handleApplyLineoutFormation}
+          activeFormation={activeFormation}
+          onFormationSelect={setActiveFormation}
           onApplyScrumFormation={handleApplyScrumFormation}
+          onApplyLineoutFormation={handleApplyLineoutFormation}
+          onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
           onApplyKickoffFormation={handleApplyKickoffFormation}
-          onClearField={handleClearField}
+          currentPhase={currentPhaseView}
+          onPhaseSelect={handlePhaseSelect}
+          onAddPhase={handleAddPhase}
+          onUndo={handleUndo}
+          canUndo={undoStack.length > 0}
+          onLabelTool={() => {
+            setToolbarTool("select")
+            handleModeChange("text")
+            setSelectedPlacementToken(null)
+          }}
+          onConeTool={() =>
+            setSelectedPlacementToken((prev) =>
+              prev?.type === "cone" ? null : { type: "cone" }
+            )
+          }
         />
       )}
-      {/* Main field area with toolbar */}
-      <main className="flex-1 flex flex-col min-w-0">
-        {/* Toolbar */}
+      <main className="flex min-w-0 flex-1 flex-col">
         {!isPresentationMode && (
-        <div className="h-10 bg-sidebar border-b border-sidebar-border flex items-center px-3 gap-2 shrink-0">
-          <span className="text-[10px] text-muted-foreground mr-1">Mode:</span>
-          <div className="flex rounded-md overflow-hidden border border-border">
-            <button
-              onClick={() => handleModeChange("move")}
-              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium transition-colors ${
-                mode === "move"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Move className="w-3 h-3" />
-              Move
-            </button>
-            <button
-              onClick={() => handleModeChange("draw")}
-              className={`flex items-center gap-1 px-2 py-1 text-[10px] font-medium transition-colors ${
-                mode === "draw"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/50 text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <Pencil className="w-3 h-3" />
-              Draw
-            </button>
-          </div>
-
-          {/* Arrow Type Selector - only visible in draw mode */}
-          {mode === "draw" && (
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setArrowDropdownOpen(!arrowDropdownOpen)
-                }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
-              >
-                <span className="w-3 h-3 flex items-center justify-center text-[8px]">
-                  {arrowType === "pass" ? "🟡" : arrowType === "kick" ? "🏉" : "→"}
-                </span>
-                {selectedArrowType?.label}
-                <ChevronDown className="w-3 h-3" />
-              </button>
-              
-              {arrowDropdownOpen && (
-                <div 
-                  className="absolute top-full left-0 mt-1 bg-card border border-border rounded-md shadow-lg py-1 z-50 min-w-[140px]"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {ARROW_TYPES.map(at => (
-                    <button
-                      key={at.type}
-                      onClick={() => {
-                        setArrowType(at.type)
-                        setArrowDropdownOpen(false)
-                      }}
-                      className={`w-full px-3 py-1.5 text-left text-[10px] hover:bg-muted transition-colors flex items-center gap-2 ${
-                        arrowType === at.type ? "bg-muted font-medium" : ""
-                      }`}
-                    >
-                      <span className="w-4 text-center">
-                        {at.type === "pass" ? "🟡" : 
-                         at.type === "kick" ? "🏉" :
-                         at.type === "decoy" ? "⋯→" :
-                         at.type === "curve" ? "↪" :
-                         at.type === "z-left" ? "↙" :
-                         at.type === "z-right" ? "↘" :
-                         at.type === "loop" ? "↺" :
-                         at.type === "short" ? "—" :
-                         "→"}
-                      </span>
-                      <span>{at.label}</span>
-                      <span className="text-[8px] text-muted-foreground ml-auto">{at.description}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          
-          <button
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2 className="w-3 h-3" />
-            Undo
-          </button>
-
-          {arrows.length > 0 && (
-            <div className="flex rounded-md overflow-hidden border border-border">
-              {[0.5, 1, 2].map((speed) => (
-                <button
-                  key={speed}
-                  onClick={() => setAnimationSpeed(speed as 0.5 | 1 | 2)}
-                  className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                    animationSpeed === speed
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  {speed}x
-                </button>
-              ))}
-            </div>
-          )}
-
-          {playName && (
-            <span className="ml-auto text-[10px] text-muted-foreground truncate max-w-[200px]">
-              {playName}
-            </span>
-          )}
-          <button
-            onClick={handleEnterPresentation}
-            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
-          >
-            ⛶ Present
-          </button>
-          <button
-            onClick={() => setZoom((prev) => Math.max(prev - 0.1, 0.5))}
-            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
-          >
-            -
-          </button>
-          <button
-            onClick={() => setZoom((prev) => Math.min(prev + 0.1, 2.0))}
-            className="px-2 py-1 text-[10px] font-medium rounded-md border border-border bg-muted/50 text-foreground hover:bg-muted transition-colors"
-          >
-            +
-          </button>
-          <span className="text-[10px] text-muted-foreground">{Math.round(zoom * 100)}%</span>
-          <button
-            onClick={() => {
-              setZoom(1)
-              setPanX(0)
-              setPanY(0)
-            }}
-            className="text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-          >
-            Reset
-          </button>
-          {zoom > 1 && (
-            <span className="text-[10px] text-muted-foreground">Alt+drag to pan</span>
-          )}
-        </div>
+          <PlaybookDesignToolbar
+            toolbarTool={toolbarTool}
+            onToolbarToolChange={handleToolbarToolChange}
+            arrowType={arrowType}
+            onArrowTypeChange={setArrowType}
+            arrowColor={arrowColor}
+            onArrowColorChange={setArrowColor}
+            zoom={zoom}
+            onZoomIn={() => setZoom((prev) => Math.min(prev + 0.1, 2.0))}
+            onZoomOut={() => setZoom((prev) => Math.max(prev - 0.1, 0.5))}
+            onZoomReset={handleZoomReset}
+            isAnimating={isAnimating}
+            onAnimate={handleToolbarAnimate}
+            canAnimate={arrows.length > 0}
+            onClearField={handleClearField}
+            onPresent={handleEnterPresentation}
+          />
         )}
 
-        {/* Field container - fills remaining space */}
         <div
           ref={fieldContainerRef}
-          className="relative flex-1 p-2 min-h-0"
+          className="relative min-h-0 flex-1 bg-[#0f0f0f] p-2"
           onMouseDown={(e) => {
             if (zoom <= 1) return
             if (e.altKey || e.button === 1) {
@@ -1510,8 +1558,41 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             onArrowTypeChange={handleArrowTypeChange}
             onTextLabelCreate={handleTextLabelCreate}
             animationSpeed={animationSpeed}
+            onAnimationStateChange={handleFieldAnimationStateChange}
             />
           </div>
+          {toolbarTool === "select" &&
+          mode === "move" &&
+          selectionPopoverPos &&
+          selectedPlayer ? (
+            <PlaybookColorPickerPopover
+              color={
+                selectedPlayer.color ??
+                (selectedPlayer.team === "attack"
+                  ? teamColors.attack
+                  : teamColors.defense)
+              }
+              onChange={(color) =>
+                handlePlayerColorChange(selectedPlayer.id, color)
+              }
+              onClose={() => setSelectedPlayerId(null)}
+              position={selectionPopoverPos}
+              showDelete
+              onDelete={() => handleDeletePlayer(selectedPlayer.id)}
+            />
+          ) : null}
+          {toolbarTool === "select" &&
+          mode === "move" &&
+          selectionPopoverPos &&
+          selectedArrow &&
+          !selectedPlayer ? (
+            <PlaybookColorPickerPopover
+              color={getArrowDisplayColor(selectedArrow)}
+              onChange={handleSelectedArrowColorChange}
+              onClose={() => setSelectedArrowId(null)}
+              position={selectionPopoverPos}
+            />
+          ) : null}
           {isPresentationMode && (
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-md border border-border bg-card/90 px-3 py-2">
               <span className="text-[11px] text-foreground max-w-[200px] truncate">
@@ -1558,27 +1639,93 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             </div>
           )}
         </div>
+
+        {!isPresentationMode && (
+          <PlaybookDesignStatusBar
+            hasUnsavedChanges={hasUnsavedChanges}
+            playerCount={fieldPlayers.length}
+            arrowCount={arrows.length}
+            currentPhase={currentPhaseView}
+            totalPhases={totalPhases}
+            onCyclePhase={handleCyclePhase}
+            userLabel={profile?.full_name ?? user.email ?? ""}
+          />
+        )}
       </main>
 
-      {/* Sidebar */}
+      {!isPresentationMode && (
+        <>
+          <button
+            type="button"
+            onClick={() => setMobileToolsOpen((o) => !o)}
+            className="fixed bottom-4 left-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#161616] text-white shadow-lg lg:hidden"
+            style={{ borderWidth: '0.5px' }}
+            aria-label="Tools"
+          >
+            {mobileToolsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+          {mobileToolsOpen ? (
+            <div
+              className="fixed inset-x-0 bottom-0 z-40 max-h-[72vh] overflow-y-auto border-t border-[#2a2a2a] bg-[#161616] p-4 lg:hidden"
+              style={{ borderTopWidth: '0.5px' }}
+            >
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#666]">
+                Quick tools
+              </p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {(['select', 'draw', 'erase'] as const).map((tool) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    onClick={() => {
+                      handleToolbarToolChange(tool)
+                      setMobileToolsOpen(false)
+                    }}
+                    className={`rounded-md px-3 py-2 text-xs capitalize ${
+                      toolbarTool === tool
+                        ? 'bg-[#C0392B] text-white'
+                        : 'bg-[#1f1f1f] text-[#aaa]'
+                    }`}
+                  >
+                    {tool}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSavePlay()
+                    setMobileToolsOpen(false)
+                  }}
+                  className="rounded-lg bg-[#C0392B] px-3 py-2 text-xs text-white"
+                >
+                  Save play
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToolbarAnimate()
+                    setMobileToolsOpen(false)
+                  }}
+                  className="rounded-lg border border-[#16a34a] bg-[#1a2a1a] px-3 py-2 text-xs text-[#86efac]"
+                >
+                  Animate
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      )}
+
       {!isPresentationMode && (
         <PlaybookRightSidebar
           user={user}
           profile={profile}
           isPremium={isPremium}
           onSignOut={handleSignOut}
-          userHeaderExtra={
-            profile?.role === 'admin' ? (
-              <button
-                type="button"
-                onClick={() => router.push('/admin')}
-                className="text-[10px] text-purple-400 hover:text-purple-300 px-2 py-1 rounded hover:bg-muted transition-colors self-start"
-              >
-                ⚙ Admin
-              </button>
-            ) : null
-          }
           playName={playName}
+          activePlayId={activePlayId}
           playType={playType}
           notes={notes}
           onPlayNameChange={setPlayName}

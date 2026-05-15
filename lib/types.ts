@@ -12,6 +12,7 @@ export interface FieldPlayer {
   team: "attack" | "defense"
   x: number
   y: number
+  color?: string
 }
 
 export interface BallToken {
@@ -52,6 +53,7 @@ export interface Arrow {
   toY: number
   arrowType: ArrowType
   receiverId?: string
+  color?: string
 }
 
 export type InteractionMode = "move" | "draw" | "text"

@@ -80,6 +80,7 @@ interface RugbyFieldProps {
   animationSpeed?: 0.5 | 1 | 2
   /** When true, hides the in-field Play/Pause/Reset toolbar (e.g. shared play view with external controls). */
   hideControls?: boolean
+  onAnimationStateChange?: (playing: boolean) => void
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -136,6 +137,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   onTextLabelCreate,
   animationSpeed = 1,
   hideControls = false,
+  onAnimationStateChange,
 }: RugbyFieldProps, ref) {
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
@@ -497,6 +499,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
     if (groupIndex >= groups.length) {
       isAnimatingRef.current = false
+      onAnimationStateChange?.(false)
       console.log("Animation complete")
       return
     }
@@ -545,7 +548,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         }
       })
     )
-  }, [ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout, buildGroupMotion, prepareNextGroup])
+  }, [ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout, buildGroupMotion, prepareNextGroup, onAnimationStateChange])
 
   const handlePlay = useCallback(() => {
     if (animationFrameRef.current) {
@@ -627,8 +630,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     })
 
     isAnimatingRef.current = true
+    onAnimationStateChange?.(true)
     playNextGroup()
-  }, [players, arrows, clearGroupTimeout, playNextGroup])
+  }, [players, arrows, clearGroupTimeout, playNextGroup, onAnimationStateChange])
 
   const handlePause = useCallback(() => {
     isAnimatingRef.current = false
@@ -636,7 +640,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       cancelAnimationFrame(animationFrameRef.current)
     }
     clearGroupTimeout()
-  }, [clearGroupTimeout])
+    onAnimationStateChange?.(false)
+  }, [clearGroupTimeout, onAnimationStateChange])
 
   const handleReset = useCallback(() => {
     isAnimatingRef.current = false
@@ -655,7 +660,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     overlappedGroupIndexRef.current = null
     animationGroupsRef.current = []
     kickCurveRef.current = null
-  }, [clearGroupTimeout])
+    onAnimationStateChange?.(false)
+  }, [clearGroupTimeout, onAnimationStateChange])
 
   useImperativeHandle(ref, () => ({
     play: handlePlay,
@@ -1439,7 +1445,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     const visualStart = getArrowVisualStart(arrow)
     const fromX = visualStart.x
     const fromY = visualStart.y
-    const color = arrow.arrowType === "pass" ? "#EAB308" : arrow.arrowType === "kick" ? "#F97316" : getArrowColor(arrow.team)
+    const color =
+      arrow.color ??
+      (arrow.arrowType === "pass"
+        ? "#EAB308"
+        : arrow.arrowType === "kick"
+          ? "#F97316"
+          : getArrowColor(arrow.team))
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - fromX
     const dy = arrow.toY - fromY
@@ -1999,7 +2011,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           >
             <circle
               r="1.6"
-              fill={getPlayerTokenColor(player.team)}
+              fill={player.color ?? getPlayerTokenColor(player.team)}
               stroke={selectedPlayerId === player.id ? "#ffffff" : "rgba(0,0,0,0.3)"}
               strokeWidth={selectedPlayerId === player.id ? "0.3" : "0.1"}
               className="transition-all"

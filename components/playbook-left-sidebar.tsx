@@ -1,19 +1,26 @@
-"use client"
+'use client'
 
-import type { PlayerTemplate, FieldPlayer, TeamColors, BallToken, ConeMarker } from "@/lib/types"
-import type { SidebarPlacementToken } from "./playbook-sidebar"
-import { Button } from "@/components/ui/button"
+import {
+  Cone,
+  Tag,
+  Plus,
+  Redo2,
+  Undo2,
+  Zap,
+} from 'lucide-react'
+import type { PlayerTemplate, FieldPlayer } from '@/lib/types'
+import type { SidebarPlacementToken } from './playbook-sidebar'
+
+export type FormationId = 'scrum' | 'lineout' | 'both' | 'kickoff'
 
 function PlayerToken({
   player,
   team,
-  color,
   selected,
   onSelect,
 }: {
   player: PlayerTemplate
-  team: "attack" | "defense"
-  color: string
+  team: 'attack' | 'defense'
   selected: boolean
   onSelect: () => void
 }) {
@@ -25,96 +32,34 @@ function PlayerToken({
       abbr: player.abbr,
       team,
     }
-    e.dataTransfer.setData("application/json", JSON.stringify(data))
-    e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData('application/json', JSON.stringify(data))
+    e.dataTransfer.effectAllowed = 'move'
   }
 
+  const isAttack = team === 'attack'
+
   return (
-    <div
+    <button
+      type="button"
       draggable
       onDragStart={handleDragStart}
       onClick={onSelect}
-      className={`flex items-center gap-0.5 px-0.5 py-0.5 rounded cursor-pointer transition-all hover:opacity-80 border ${
-        selected ? "border-primary ring-2 ring-primary/70 shadow-[0_0_10px_rgba(59,130,246,0.7)]" : "border-white/10"
-      }`}
-      style={{ backgroundColor: `${color}20` }}
-    >
-      <div className="w-[20px] h-[20px] rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: color }}>
-        <span className="text-[9px] font-bold text-white leading-none">{player.number}</span>
-      </div>
-      <span className="text-[7px] text-foreground font-medium truncate">{player.abbr}</span>
-    </div>
-  )
-}
-
-function BallTokenSidebar({ hasBall, selected, onSelect }: { hasBall: boolean; selected: boolean; onSelect: () => void }) {
-  const handleDragStart = (e: React.DragEvent) => {
-    const data = { type: "ball" }
-    e.dataTransfer.setData("application/json", JSON.stringify(data))
-    e.dataTransfer.effectAllowed = "move"
-  }
-
-  return (
-    <div
-      draggable={!hasBall}
-      onDragStart={handleDragStart}
-      onClick={onSelect}
-      className={`flex items-center gap-1 px-1 py-1 rounded transition-all border border-yellow-500/30 ${
-        hasBall ? "opacity-40 cursor-not-allowed bg-yellow-500/10" : "cursor-grab active:cursor-grabbing hover:opacity-80 bg-yellow-500/20"
-      } ${selected ? "ring-2 ring-primary/70 shadow-[0_0_10px_rgba(59,130,246,0.7)]" : ""}`}
-    >
-      <div className="w-[20px] h-[14px] rounded-full bg-yellow-500 flex items-center justify-center shrink-0">
-        <span className="text-[6px] font-bold text-black leading-none">BALL</span>
-      </div>
-      <span className="text-[8px] text-foreground font-medium">Ball</span>
-    </div>
-  )
-}
-
-function ConeTokenSidebar({ selected, onSelect }: { selected: boolean; onSelect: () => void }) {
-  const handleDragStart = (e: React.DragEvent) => {
-    const data = { type: "cone" }
-    e.dataTransfer.setData("application/json", JSON.stringify(data))
-    e.dataTransfer.effectAllowed = "move"
-  }
-
-  return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      onClick={onSelect}
-      className={`flex items-center gap-1 px-1 py-1 rounded transition-all border border-orange-500/30 cursor-pointer hover:opacity-80 bg-orange-500/20 ${
-        selected ? "ring-2 ring-primary/70 shadow-[0_0_10px_rgba(59,130,246,0.7)]" : ""
+      className={`flex w-[52px] flex-col items-center gap-0.5 rounded-md p-1 transition-all ${
+        selected ? 'ring-1 ring-[#C0392B]' : 'hover:bg-white/5'
       }`}
     >
-      <div className="w-[18px] h-[18px] flex items-center justify-center shrink-0">
-        <svg viewBox="0 0 20 20" className="w-full h-full">
-          <polygon points="10,2 18,16 2,16" fill="#F97316" stroke="rgba(0,0,0,0.3)" strokeWidth="1" />
-        </svg>
+      <div
+        className={`flex h-[34px] w-[34px] items-center justify-center rounded-full border text-[11px] font-bold ${
+          isAttack
+            ? 'border-[#2563eb] bg-[#1a3a6e] text-[#93c5fd]'
+            : 'border-[#dc2626] bg-[#6e1a1a] text-[#fca5a5]'
+        }`}
+        style={{ borderWidth: '0.5px' }}
+      >
+        {player.number}
       </div>
-      <span className="text-[8px] text-foreground font-medium">Cone</span>
-    </div>
-  )
-}
-
-function PhaseTokenSidebar({ phase, selected, onSelect }: { phase: number; selected: boolean; onSelect: () => void }) {
-  const handleDragStart = (e: React.DragEvent) => {
-    const data = { type: "phase", phase }
-    e.dataTransfer.setData("application/json", JSON.stringify(data))
-    e.dataTransfer.effectAllowed = "move"
-  }
-
-  return (
-    <div
-      draggable
-      onDragStart={handleDragStart}
-      onClick={onSelect}
-      className={`flex items-center justify-center w-[24px] h-[24px] rounded-full bg-white cursor-pointer hover:opacity-80 transition-all border border-gray-300 ${
-        selected ? "ring-2 ring-primary/70 shadow-[0_0_10px_rgba(59,130,246,0.7)]" : ""
-      }`}
-    >
-      <span className="text-[10px] font-bold text-black leading-none">{phase}</span>
-    </div>
+      <span className="text-[7px] font-medium text-[#888]">{player.abbr}</span>
+    </button>
   )
 }
 
@@ -122,235 +67,311 @@ interface PlaybookLeftSidebarProps {
   attackPlayers: PlayerTemplate[]
   defensePlayers: PlayerTemplate[]
   fieldPlayers: FieldPlayer[]
-  ball: BallToken | null
-  cones: ConeMarker[]
-  teamColors: TeamColors
   selectedPlacementToken: SidebarPlacementToken | null
   onSelectPlacementToken: (token: SidebarPlacementToken | null) => void
-  onApplyAttackFormation: () => void
-  onApplyDefenseFormation: () => void
-  onApplyBothTeamsFormation: () => void
-  onApplyLineoutFormation: () => void
+  activeFormation: FormationId | null
+  onFormationSelect: (id: FormationId) => void
   onApplyScrumFormation: () => void
+  onApplyLineoutFormation: () => void
+  onApplyBothTeamsFormation: () => void
   onApplyKickoffFormation: () => void
-  onClearField: () => void
+  currentPhase: number
+  onPhaseSelect: (phase: number) => void
+  onAddPhase: () => void
+  onUndo: () => void
+  canUndo: boolean
+  onLabelTool: () => void
+  onConeTool: () => void
 }
+
+const FORMATIONS: { id: FormationId; label: string }[] = [
+  { id: 'scrum', label: 'Scrum' },
+  { id: 'lineout', label: 'Lineout' },
+  { id: 'both', label: 'Both Teams' },
+  { id: 'kickoff', label: 'Kickoff' },
+]
 
 export function PlaybookLeftSidebar({
   attackPlayers,
   defensePlayers,
   fieldPlayers,
-  ball,
-  cones,
-  teamColors,
   selectedPlacementToken,
   onSelectPlacementToken,
-  onApplyAttackFormation,
-  onApplyDefenseFormation,
-  onApplyBothTeamsFormation,
-  onApplyLineoutFormation,
+  activeFormation,
+  onFormationSelect,
   onApplyScrumFormation,
+  onApplyLineoutFormation,
+  onApplyBothTeamsFormation,
   onApplyKickoffFormation,
-  onClearField,
+  currentPhase,
+  onPhaseSelect,
+  onAddPhase,
+  onUndo,
+  canUndo,
+  onLabelTool,
+  onConeTool,
 }: PlaybookLeftSidebarProps) {
-  const attackOnField = fieldPlayers.filter((p) => p.team === "attack").length
-  const defenseOnField = fieldPlayers.filter((p) => p.team === "defense").length
+  const attackOnField = fieldPlayers.filter((p) => p.team === 'attack').length
+  const defenseOnField = fieldPlayers.filter((p) => p.team === 'defense').length
+
+  const applyFormation = (id: FormationId) => {
+    onFormationSelect(id)
+    switch (id) {
+      case 'scrum':
+        onApplyScrumFormation()
+        break
+      case 'lineout':
+        onApplyLineoutFormation()
+        break
+      case 'both':
+        onApplyBothTeamsFormation()
+        break
+      case 'kickoff':
+        onApplyKickoffFormation()
+        break
+    }
+  }
 
   return (
-    <aside className="w-[160px] bg-sidebar border-r border-sidebar-border flex flex-col h-full shrink-0 overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-2 py-2 min-h-0 space-y-3">
-        <div>
-          <p className="text-[8px] uppercase tracking-wider text-muted-foreground mb-1">Formations</p>
-          <div className="space-y-1">
-            <Button onClick={onApplyAttackFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              ⚡ Attack XV
-            </Button>
-            <Button onClick={onApplyDefenseFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              🛡 Defence XV
-            </Button>
-            <Button onClick={onApplyBothTeamsFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              ⚔ Both Teams
-            </Button>
-            <Button onClick={onApplyLineoutFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              🔄 Lineout
-            </Button>
-            <Button onClick={onApplyScrumFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              Scrum
-            </Button>
-            <Button onClick={onApplyKickoffFormation} variant="secondary" size="sm" className="w-full h-6 text-[9px] justify-start px-2">
-              ⚽ Kick-off
-            </Button>
+    <aside
+      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-[#2a2a2a] bg-[#161616] lg:flex"
+      style={{ borderRightWidth: '0.5px' }}
+    >
+      <div
+        className="shrink-0 border-b border-[#2a2a2a] px-3 py-3"
+        style={{ borderBottomWidth: '0.5px' }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-md bg-[#C0392B] text-white"
+          >
+            <Zap className="h-4 w-4" strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-sm font-bold tracking-tight text-white">PlayForge</p>
+            <p className="text-[9px] uppercase tracking-widest text-[#666]">Play Designer</p>
           </div>
         </div>
+      </div>
 
-        <div className="border-t border-sidebar-border" />
-
-        <div>
-          <p className="text-[8px] uppercase tracking-wider text-muted-foreground mb-1">Players</p>
-
-          <div className="mb-2">
-            <div className="flex items-center justify-between mb-0.5">
-              <h2 className="text-[9px] font-semibold flex items-center gap-1" style={{ color: teamColors.attack }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: teamColors.attack }} />
-                Attack
-              </h2>
-              <span className="text-[8px] text-muted-foreground">{attackOnField}/15</span>
-            </div>
-
-            <p className="text-[7px] uppercase tracking-wider text-muted-foreground mb-0.5">Forwards</p>
-            <div className="grid grid-cols-2 gap-px mb-1">
-              {attackPlayers.filter((p) => p.number <= 8).map((player) => (
-                <PlayerToken
-                  key={player.number}
-                  player={player}
-                  team="attack"
-                  color={teamColors.attack}
-                  selected={
-                    selectedPlacementToken?.type === "player" &&
-                    selectedPlacementToken.team === "attack" &&
-                    selectedPlacementToken.number === player.number
-                  }
-                  onSelect={() =>
-                    onSelectPlacementToken(
-                      selectedPlacementToken?.type === "player" &&
-                        selectedPlacementToken.team === "attack" &&
-                        selectedPlacementToken.number === player.number
-                        ? null
-                        : { type: "player", team: "attack", number: player.number }
-                    )
-                  }
-                />
-              ))}
-            </div>
-
-            <p className="text-[7px] uppercase tracking-wider text-muted-foreground mb-0.5">Backs</p>
-            <div className="grid grid-cols-2 gap-px">
-              {attackPlayers.filter((p) => p.number > 8).map((player) => (
-                <PlayerToken
-                  key={player.number}
-                  player={player}
-                  team="attack"
-                  color={teamColors.attack}
-                  selected={
-                    selectedPlacementToken?.type === "player" &&
-                    selectedPlacementToken.team === "attack" &&
-                    selectedPlacementToken.number === player.number
-                  }
-                  onSelect={() =>
-                    onSelectPlacementToken(
-                      selectedPlacementToken?.type === "player" &&
-                        selectedPlacementToken.team === "attack" &&
-                        selectedPlacementToken.number === player.number
-                        ? null
-                        : { type: "player", team: "attack", number: player.number }
-                    )
-                  }
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-2">
-            <div className="flex items-center justify-between mb-0.5">
-              <h2 className="text-[9px] font-semibold flex items-center gap-1" style={{ color: teamColors.defense }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: teamColors.defense }} />
-                Defence
-              </h2>
-              <span className="text-[8px] text-muted-foreground">{defenseOnField}/15</span>
-            </div>
-
-            <p className="text-[7px] uppercase tracking-wider text-muted-foreground mb-0.5">Forwards</p>
-            <div className="grid grid-cols-2 gap-px mb-1">
-              {defensePlayers.filter((p) => p.number <= 8).map((player) => (
-                <PlayerToken
-                  key={player.number}
-                  player={player}
-                  team="defense"
-                  color={teamColors.defense}
-                  selected={
-                    selectedPlacementToken?.type === "player" &&
-                    selectedPlacementToken.team === "defense" &&
-                    selectedPlacementToken.number === player.number
-                  }
-                  onSelect={() =>
-                    onSelectPlacementToken(
-                      selectedPlacementToken?.type === "player" &&
-                        selectedPlacementToken.team === "defense" &&
-                        selectedPlacementToken.number === player.number
-                        ? null
-                        : { type: "player", team: "defense", number: player.number }
-                    )
-                  }
-                />
-              ))}
-            </div>
-
-            <p className="text-[7px] uppercase tracking-wider text-muted-foreground mb-0.5">Backs</p>
-            <div className="grid grid-cols-2 gap-px">
-              {defensePlayers.filter((p) => p.number > 8).map((player) => (
-                <PlayerToken
-                  key={player.number}
-                  player={player}
-                  team="defense"
-                  color={teamColors.defense}
-                  selected={
-                    selectedPlacementToken?.type === "player" &&
-                    selectedPlacementToken.team === "defense" &&
-                    selectedPlacementToken.number === player.number
-                  }
-                  onSelect={() =>
-                    onSelectPlacementToken(
-                      selectedPlacementToken?.type === "player" &&
-                        selectedPlacementToken.team === "defense" &&
-                        selectedPlacementToken.number === player.number
-                        ? null
-                        : { type: "player", team: "defense", number: player.number }
-                    )
-                  }
-                />
-              ))}
-            </div>
-          </div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          Formation
+        </p>
+        <div className="mb-4 grid grid-cols-2 gap-1.5">
+          {FORMATIONS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => applyFormation(f.id)}
+              className={`rounded-md border px-2 py-2 text-[10px] font-medium transition-colors ${
+                activeFormation === f.id
+                  ? 'border-[#C0392B] bg-[#C0392B] text-white'
+                  : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#aaa] hover:text-white'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <BallTokenSidebar
-            hasBall={ball !== null}
-            selected={selectedPlacementToken?.type === "ball"}
-            onSelect={() => onSelectPlacementToken(selectedPlacementToken?.type === "ball" ? null : { type: "ball" })}
-          />
-          <ConeTokenSidebar
-            selected={selectedPlacementToken?.type === "cone"}
-            onSelect={() => onSelectPlacementToken(selectedPlacementToken?.type === "cone" ? null : { type: "cone" })}
-          />
-        </div>
+        <div
+          className="mb-3 border-t border-[#2a2a2a]"
+          style={{ borderTopWidth: '0.5px' }}
+        />
 
-        <div>
-          <p className="text-[7px] uppercase tracking-wider text-muted-foreground mb-0.5">Phase Markers</p>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4, 5].map((phase) => (
-              <PhaseTokenSidebar
-                key={phase}
-                phase={phase}
-                selected={selectedPlacementToken?.type === "phase" && selectedPlacementToken.phase === phase}
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-[#60a5fa]">ATTACK</p>
+          <span className="text-[9px] text-[#555]">{attackOnField}/15</span>
+        </div>
+        <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        <div className="mb-2 flex flex-wrap gap-0.5">
+          {attackPlayers
+            .filter((p) => p.number <= 8)
+            .map((player) => (
+              <PlayerToken
+                key={`a-${player.number}`}
+                player={player}
+                team="attack"
+                selected={
+                  selectedPlacementToken?.type === 'player' &&
+                  selectedPlacementToken.team === 'attack' &&
+                  selectedPlacementToken.number === player.number
+                }
                 onSelect={() =>
                   onSelectPlacementToken(
-                    selectedPlacementToken?.type === "phase" && selectedPlacementToken.phase === phase ? null : { type: "phase", phase }
+                    selectedPlacementToken?.type === 'player' &&
+                      selectedPlacementToken.team === 'attack' &&
+                      selectedPlacementToken.number === player.number
+                      ? null
+                      : { type: 'player', team: 'attack', number: player.number }
                   )
                 }
               />
             ))}
-          </div>
+        </div>
+        <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
+        <div className="mb-3 flex flex-wrap gap-0.5">
+          {attackPlayers
+            .filter((p) => p.number > 8)
+            .map((player) => (
+              <PlayerToken
+                key={`a-${player.number}`}
+                player={player}
+                team="attack"
+                selected={
+                  selectedPlacementToken?.type === 'player' &&
+                  selectedPlacementToken.team === 'attack' &&
+                  selectedPlacementToken.number === player.number
+                }
+                onSelect={() =>
+                  onSelectPlacementToken(
+                    selectedPlacementToken?.type === 'player' &&
+                      selectedPlacementToken.team === 'attack' &&
+                      selectedPlacementToken.number === player.number
+                      ? null
+                      : { type: 'player', team: 'attack', number: player.number }
+                  )
+                }
+              />
+            ))}
         </div>
 
-        <button
-          onClick={onClearField}
-          className="w-full mt-2 px-3 py-1.5 text-xs rounded-md border border-destructive/50 text-destructive hover:bg-destructive/10 transition-colors"
-        >
-          🗑 Clear Field
-        </button>
+        <div
+          className="mb-3 border-t border-[#2a2a2a]"
+          style={{ borderTopWidth: '0.5px' }}
+        />
+
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-[10px] font-semibold text-[#f87171]">DEFENCE</p>
+          <span className="text-[9px] text-[#555]">{defenseOnField}/15</span>
+        </div>
+        <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        <div className="mb-2 flex flex-wrap gap-0.5">
+          {defensePlayers
+            .filter((p) => p.number <= 8)
+            .map((player) => (
+              <PlayerToken
+                key={`d-${player.number}`}
+                player={player}
+                team="defense"
+                selected={
+                  selectedPlacementToken?.type === 'player' &&
+                  selectedPlacementToken.team === 'defense' &&
+                  selectedPlacementToken.number === player.number
+                }
+                onSelect={() =>
+                  onSelectPlacementToken(
+                    selectedPlacementToken?.type === 'player' &&
+                      selectedPlacementToken.team === 'defense' &&
+                      selectedPlacementToken.number === player.number
+                      ? null
+                      : { type: 'player', team: 'defense', number: player.number }
+                  )
+                }
+              />
+            ))}
+        </div>
+        <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
+        <div className="mb-4 flex flex-wrap gap-0.5">
+          {defensePlayers
+            .filter((p) => p.number > 8)
+            .map((player) => (
+              <PlayerToken
+                key={`d-${player.number}`}
+                player={player}
+                team="defense"
+                selected={
+                  selectedPlacementToken?.type === 'player' &&
+                  selectedPlacementToken.team === 'defense' &&
+                  selectedPlacementToken.number === player.number
+                }
+                onSelect={() =>
+                  onSelectPlacementToken(
+                    selectedPlacementToken?.type === 'player' &&
+                      selectedPlacementToken.team === 'defense' &&
+                      selectedPlacementToken.number === player.number
+                      ? null
+                      : { type: 'player', team: 'defense', number: player.number }
+                  )
+                }
+              />
+            ))}
+        </div>
+
+        <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          Phases
+        </p>
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          {[1, 2, 3, 4, 5].map((phase) => (
+            <button
+              key={phase}
+              type="button"
+              onClick={() => onPhaseSelect(phase)}
+              className={`flex h-[26px] w-[26px] items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+                currentPhase === phase
+                  ? 'bg-[#C0392B] text-white'
+                  : 'border border-[#2a2a2a] bg-[#1f1f1f] text-[#888]'
+              }`}
+              style={currentPhase === phase ? undefined : { borderWidth: '0.5px' }}
+            >
+              {phase}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onAddPhase}
+            className="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-dashed border-[#444] text-[#666] hover:border-[#888] hover:text-[#aaa]"
+            title="Add phase marker"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={onConeTool}
+            className={`inline-flex items-center gap-1 rounded-full border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-1 text-[10px] text-[#888] hover:text-white ${
+              selectedPlacementToken?.type === 'cone' ? 'ring-1 ring-[#C0392B]' : ''
+            }`}
+            style={{ borderWidth: '0.5px' }}
+          >
+            <Cone className="h-3 w-3" />
+            Cone
+          </button>
+          <button
+            type="button"
+            onClick={onLabelTool}
+            className="inline-flex items-center gap-1 rounded-full border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-1 text-[10px] text-[#888] hover:text-white"
+            style={{ borderWidth: '0.5px' }}
+          >
+            <Tag className="h-3 w-3" />
+            Label
+          </button>
+          <button
+            type="button"
+            onClick={onUndo}
+            disabled={!canUndo}
+            className="inline-flex items-center gap-1 rounded-full border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-1 text-[10px] text-[#888] hover:text-white disabled:opacity-40"
+            style={{ borderWidth: '0.5px' }}
+          >
+            <Undo2 className="h-3 w-3" />
+            Undo
+          </button>
+          <button
+            type="button"
+            disabled
+            className="inline-flex cursor-not-allowed items-center gap-1 rounded-full border border-[#2a2a2a] bg-[#1f1f1f] px-2 py-1 text-[10px] text-[#555] opacity-50"
+            style={{ borderWidth: '0.5px' }}
+            title="Redo not available"
+          >
+            <Redo2 className="h-3 w-3" />
+            Redo
+          </button>
+        </div>
       </div>
     </aside>
   )
 }
-
