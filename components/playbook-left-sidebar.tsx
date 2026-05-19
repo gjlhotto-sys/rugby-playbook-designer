@@ -376,7 +376,7 @@ export function PlaybookLeftSidebar({
         <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
           Phases
         </p>
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <div className="mb-1 flex flex-wrap items-center gap-1.5">
           {[1, 2, 3, 4, 5].map((phase) => (
             <button
               key={phase}
@@ -396,10 +396,40 @@ export function PlaybookLeftSidebar({
             type="button"
             onClick={onAddPhase}
             className="flex h-[26px] w-[26px] items-center justify-center rounded-full border border-dashed border-[#444] text-[#666] hover:border-[#888] hover:text-[#aaa]"
-            title="Add phase marker"
+            title="Next phase"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
+        </div>
+        <p className="mb-3 text-[9px] text-[#555]">Tap to switch phase</p>
+
+        <p className="mb-1.5 text-[9px] font-medium uppercase tracking-wider text-[#666]">
+          Breakdown
+        </p>
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {[1, 2, 3, 4, 5].map((phase) => {
+            const selected =
+              selectedPlacementToken?.type === 'phase' &&
+              selectedPlacementToken.phase === phase
+            return (
+              <button
+                key={`breakdown-${phase}`}
+                type="button"
+                onClick={() =>
+                  onSelectPlacementToken(
+                    selected ? null : { type: 'phase', phase }
+                  )
+                }
+                className={`flex h-[26px] w-[26px] items-center justify-center rounded-full border border-gray-300 bg-white text-[10px] font-bold text-black transition-all hover:opacity-80 ${
+                  selected ? 'ring-1 ring-[#C0392B]' : ''
+                }`}
+                style={{ borderWidth: '0.5px' }}
+                title={`Place breakdown marker ${phase} on field`}
+              >
+                {phase}
+              </button>
+            )
+          })}
         </div>
 
         <div className="flex flex-wrap gap-1.5">

@@ -1849,11 +1849,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
   const switchToPhase = useCallback(
     (phase: number) => {
+      if (phase === currentPhaseView) return
+
       persistCurrentPhaseSnapshot(currentPhaseView)
       setCurrentPhaseView(phase)
       const snap = phaseSnapshots[phase] ?? createEmptyPhaseSnapshot()
       applyCanvasSnapshot(snap)
-      setSelectedPlacementToken({ type: "phase", phase })
+      setSelectedPlacementToken(null)
 
       if (phase > 1) {
         const isEmpty =

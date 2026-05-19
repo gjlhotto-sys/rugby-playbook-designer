@@ -2,8 +2,16 @@ import type { Arrow, FieldPlayer, PhaseSnapshot } from './types'
 
 type SequencedArrow = Arrow & { timestamp?: number }
 
+function getArrowEndpoint(arrow: Arrow): { x: number; y: number } {
+  if (arrow.arrowType === 'freedraw' && arrow.points && arrow.points.length > 0) {
+    const end = arrow.points[arrow.points.length - 1]
+    return { x: end.x, y: end.y }
+  }
+  return { x: arrow.toX, y: arrow.toY }
+}
+
 function arrowBelongsToPlayer(arrow: Arrow, player: FieldPlayer): boolean {
-  if (arrow.arrowType === 'pass' || arrow.arrowType === 'kick' || arrow.arrowType === 'ruck') {
+  if (arrow.arrowType === 'pass' || arrow.arrowType === 'kick') {
     return false
   }
   const playerKeys = new Set([
@@ -44,7 +52,8 @@ export function resolvePlayersToArrowEndpoints(
     }
 
     const lastArrow = movementArrows[movementArrows.length - 1].arrow
-    return { ...player, x: lastArrow.toX, y: lastArrow.toY }
+    const end = getArrowEndpoint(lastArrow)
+    return { ...player, x: end.x, y: end.y }
   })
 }
 
