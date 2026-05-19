@@ -9,6 +9,7 @@ import type {
   TeamColors,
   SavedPlay,
   PlayType,
+  RuckMarker,
 } from './types'
 import { PLAY_TYPES } from './types'
 import type { FormationId, PlayCategory } from './play-metadata'
@@ -34,6 +35,7 @@ export interface PlayData {
   cones: ConeMarker[]
   labels: TextLabel[]
   team_colors: TeamColors
+  ruck_markers?: RuckMarker[]
 }
 
 function isPlayType(value: string): value is PlayType {
@@ -79,7 +81,13 @@ function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
     phases: (row.phases as PhaseMarker[]) ?? [],
     cones: (row.cones as ConeMarker[]) ?? [],
     labels: (row.labels as TextLabel[]) ?? [],
+    ruckMarkers: parseRuckMarkers(row),
   }
+}
+
+function parseRuckMarkers(row: Record<string, unknown>): RuckMarker[] {
+  const raw = row.ruck_markers ?? row.ruckMarkers
+  return Array.isArray(raw) ? (raw as RuckMarker[]) : []
 }
 
 export async function loadCloudPlaysForUser(): Promise<SavedPlay[]> {
@@ -129,6 +137,9 @@ function isMissingColumnError(
   )
 }
 
+/** Requires migration: supabase/migrations/20260519_add_ruck_markers.sql */
+const RUCK_MARKERS_COLUMN = 'ruck_markers'
+
 function buildPlayInsertRow(
   playData: PlayData,
   userId: string,
@@ -145,6 +156,7 @@ function buildPlayInsertRow(
     cones: playData.cones,
     labels: playData.labels,
     team_colors: playData.team_colors,
+    ruck_markers: playData.ruck_markers ?? [],
     user_id: userId,
   }
 
@@ -225,6 +237,17 @@ export async function savePlayToCloud(
   try {
     let { data, error } = await saveWithExtendedColumns(true)
 
+    if (error && isMissingColumnError(error, RUCK_MARKERS_COLUMN)) {
+      console.warn(
+        'plays table missing ruck_markers column; retrying without it (run migration 20260519_add_ruck_markers.sql)'
+      )
+      const payload = buildPlayInsertRow(playData, userId, true)
+      delete payload.ruck_markers
+      if (existingId) payload.id = existingId
+      else delete payload.id
+      ;({ data, error } = await writePlayRow(payload, Boolean(existingId)))
+    }
+
     if (
       error &&
       (isMissingColumnError(error, 'play_category') ||
@@ -298,7 +321,11 @@ export async function loadPlayFromCloud(shareId: string): Promise<PlayData | nul
       .single()
 
     if (error) throw error
-    return data as PlayData
+    const row = data as Record<string, unknown>
+    return {
+      ...(row as unknown as PlayData),
+      ruck_markers: parseRuckMarkers(row),
+    }
   } catch (err) {
     console.error('Failed to load play:', err)
     return null

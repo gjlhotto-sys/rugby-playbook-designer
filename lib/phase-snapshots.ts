@@ -56,6 +56,7 @@ export function createEmptyPhaseSnapshot(): PhaseSnapshot {
     cones: [],
     labels: [],
     phaseMarkers: [],
+    ruckMarkers: [],
   }
 }
 

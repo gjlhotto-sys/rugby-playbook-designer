@@ -43,7 +43,7 @@ export interface TextLabel {
   y: number
 }
 
-export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short" | "kick"
+export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short" | "kick" | "ruck"
 
 export interface Arrow {
   id: string
@@ -56,6 +56,14 @@ export interface Arrow {
   arrowType: ArrowType
   receiverId?: string
   color?: string
+  ruckId?: string
+}
+
+export interface RuckMarker {
+  id: string
+  ruckId: string
+  x: number
+  y: number
 }
 
 export type InteractionMode = "move" | "draw" | "text"
@@ -76,6 +84,7 @@ export interface PhaseSnapshot {
   cones: ConeMarker[]
   labels: TextLabel[]
   phaseMarkers: PhaseMarker[]
+  ruckMarkers: RuckMarker[]
 }
 
 export interface SavedPlay {
@@ -99,6 +108,7 @@ export interface SavedPlay {
   phases: PhaseMarker[]
   cones: ConeMarker[]
   labels: TextLabel[]
+  ruckMarkers?: RuckMarker[]
   phaseSnapshots?: Record<number, PhaseSnapshot>
   currentPhase?: number
 }
@@ -109,8 +119,10 @@ export type UndoAction =
   | { type: "remove_player"; player: FieldPlayer; arrows: Arrow[] }
   | { type: "move_player"; playerId: string; prevX: number; prevY: number; prevArrows: Arrow[] }
   | { type: "add_arrow"; arrow: Arrow }
+  | { type: "add_ruck"; ruckId: string; arrows: Arrow[]; marker: RuckMarker }
   | { type: "edit_arrow"; arrow: Arrow; prevArrow: Arrow }
   | { type: "delete_arrow"; arrow: Arrow }
+  | { type: "delete_ruck"; ruckId: string; arrows: Arrow[]; marker: RuckMarker | null }
   | { type: "add_ball"; ball: BallToken }
   | { type: "move_ball"; prevX: number; prevY: number; prevArrows: Arrow[] }
   | { type: "add_phase"; phase: PhaseMarker }
@@ -150,6 +162,7 @@ export const ARROW_TYPES: { type: ArrowType; label: string; description: string 
   { type: "loop", label: "Loop", description: "Looping run" },
   { type: "short", label: "Short", description: "Short gain with tick" },
   { type: "kick", label: "Kick", description: "Kick down or cross field" },
+  { type: "ruck", label: "Ruck", description: "Multiple players converge on one point" },
 ]
 
 export const RUGBY_POSITIONS: PlayerTemplate[] = [

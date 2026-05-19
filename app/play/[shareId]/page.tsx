@@ -102,6 +102,7 @@ export default function PlayViewPage() {
     phases: play.phases ?? [],
     cones: play.cones ?? [],
     labels: play.labels ?? [],
+    ruckMarkers: play.ruck_markers ?? [],
     selectedPlayerId: null,
     selectedBall: false,
     selectedArrowId: null,

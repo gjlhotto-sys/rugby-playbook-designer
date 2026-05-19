@@ -18,7 +18,7 @@ import {
 import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
 import { getViewBoxForZone, type FieldZone } from "@/lib/field-zones"
 import { Menu, X } from "lucide-react"
-import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot } from "@/lib/types"
+import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot, RuckMarker } from "@/lib/types"
 import { RUGBY_POSITIONS } from "@/lib/types"
 import type { PlayCategory } from "@/lib/play-metadata"
 import {
@@ -71,6 +71,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [phases, setPhases] = useState<PhaseMarker[]>([])
   const [cones, setCones] = useState<ConeMarker[]>([])
   const [labels, setLabels] = useState<TextLabel[]>([])
+  const [ruckMarkers, setRuckMarkers] = useState<RuckMarker[]>([])
+  const [ruckSelectedPlayerIds, setRuckSelectedPlayerIds] = useState<string[]>([])
+  const [ruckHintDismissed, setRuckHintDismissed] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedBall, setSelectedBall] = useState(false)
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
@@ -226,6 +229,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     phases,
     cones,
     labels,
+    ruckMarkers,
     playName,
     playType,
     notes,
@@ -335,8 +339,22 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           )
         )
         break
+      case "add_ruck":
+        setArrows((prev) => prev.filter((a) => a.ruckId !== lastAction.ruckId))
+        setRuckMarkers((prev) => prev.filter((m) => m.ruckId !== lastAction.ruckId))
+        break
+      case "delete_ruck":
+        setArrows((prev) => [...prev, ...lastAction.arrows])
+        if (lastAction.marker) {
+          setRuckMarkers((prev) => [...prev, lastAction.marker!])
+        }
+        break
     }
   }, [undoStack])
+
+  const clearRuckSelection = useCallback(() => {
+    setRuckSelectedPlayerIds([])
+  }, [])
 
   const getFieldCoords = useCallback((xPercent: number, yPercent: number) => ({
     x: BUFFER + FIELD_WIDTH * xPercent,
@@ -353,8 +371,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       cones,
       labels,
       phaseMarkers: phases,
+      ruckMarkers,
     }),
-    [fieldPlayers, arrows, ball, cones, labels, phases]
+    [fieldPlayers, arrows, ball, cones, labels, phases, ruckMarkers]
   )
 
   const applyCanvasSnapshot = useCallback((snap: PhaseSnapshot) => {
@@ -364,11 +383,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setCones(snap.cones)
     setLabels(snap.labels)
     setPhases(snap.phaseMarkers)
+    setRuckMarkers(snap.ruckMarkers ?? [])
     setSelectedPlayerId(null)
     setSelectedBall(false)
     setSelectedArrowId(null)
     setPasserSelected(null)
-  }, [])
+    clearRuckSelection()
+  }, [clearRuckSelection])
 
   const persistCurrentPhaseSnapshot = useCallback(
     (phaseNum: number, snap?: PhaseSnapshot) => {
@@ -845,6 +866,56 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
 
     if (mode !== "draw") return
+
+    if (arrowType === "ruck") {
+      if (ruckSelectedPlayerIds.length === 0) return
+
+      const ruckId = `ruck-${Date.now()}`
+      const arrowTimestamp = (() => {
+        const existing = arrows
+          .map((a) => (a as Arrow & { timestamp?: number }).timestamp)
+          .filter((t): t is number => typeof t === "number")
+        return existing.length > 0 ? Math.max(...existing) + 1 : Date.now()
+      })()
+
+      const newArrows: (Arrow & { timestamp: number })[] = []
+      ruckSelectedPlayerIds.forEach((playerId, index) => {
+        const player = fieldPlayers.find((p) => p.id === playerId)
+        if (!player) return
+        newArrows.push({
+          id: `arrow-${Date.now()}-${index}`,
+          playerId: player.id,
+          team: player.team,
+          fromX: player.x,
+          fromY: player.y,
+          toX: x,
+          toY: y,
+          arrowType: "ruck",
+          ruckId,
+          color: "#16a34a",
+          timestamp: arrowTimestamp,
+        })
+      })
+
+      if (newArrows.length === 0) return
+
+      const marker: RuckMarker = {
+        id: `ruck-marker-${Date.now()}`,
+        ruckId,
+        x,
+        y,
+      }
+
+      setArrows((prev) => [...prev, ...newArrows])
+      setRuckMarkers((prev) => [...prev, marker])
+      setUndoStack((prev) => [
+        ...prev,
+        { type: "add_ruck", ruckId, arrows: newArrows, marker },
+      ])
+      clearRuckSelection()
+      setRuckHintDismissed(true)
+      return
+    }
     
     if (selectedPlayerId) {
       const player = fieldPlayers.find(p => p.id === selectedPlayerId)
@@ -856,7 +927,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             a.playerId === `attack-${player.number}` ||
             a.playerId === `defense-${player.number}`) &&
           a.arrowType !== "pass" &&
-          a.arrowType !== "kick"
+          a.arrowType !== "kick" &&
+          a.arrowType !== "ruck"
         )
         .sort((a, b) => ((a as { timestamp?: number }).timestamp ?? 0) - ((b as { timestamp?: number }).timestamp ?? 0))
         .pop()
@@ -892,7 +964,38 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setUndoStack(prev => [...prev, { type: "add_arrow", arrow: newArrow }])
       setSelectedBall(false)
     }
-  }, [selectedPlacementToken, mode, selectedPlayerId, selectedBall, fieldPlayers, ball, arrowType, arrowColor, makePlayerAt])
+  }, [selectedPlacementToken, mode, selectedPlayerId, selectedBall, fieldPlayers, ball, arrowType, arrowColor, makePlayerAt, ruckSelectedPlayerIds, arrows, clearRuckSelection])
+
+  const handleToggleRuckPlayer = useCallback((playerId: string) => {
+    setRuckSelectedPlayerIds((prev) =>
+      prev.includes(playerId)
+        ? prev.filter((id) => id !== playerId)
+        : [...prev, playerId]
+    )
+  }, [])
+
+  const handleEraseRuck = useCallback(
+    (ruckId: string) => {
+      if (!window.confirm("Remove this ruck group?")) return
+      const groupArrows = arrows.filter((a) => a.ruckId === ruckId)
+      const marker = ruckMarkers.find((m) => m.ruckId === ruckId) ?? null
+      setArrows((prev) => prev.filter((a) => a.ruckId !== ruckId))
+      setRuckMarkers((prev) => prev.filter((m) => m.ruckId !== ruckId))
+      setUndoStack((prev) => [
+        ...prev,
+        { type: "delete_ruck", ruckId, arrows: groupArrows, marker },
+      ])
+    },
+    [arrows, ruckMarkers]
+  )
+
+  const handleToolbarArrowTypeChange = useCallback(
+    (type: ArrowType) => {
+      clearRuckSelection()
+      setArrowType(type)
+    },
+    [clearRuckSelection]
+  )
 
   const handleDeletePlayer = useCallback((playerId: string) => {
     setFieldPlayers(prev => prev.filter(p => p.id !== playerId))
@@ -942,6 +1045,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setCones([])
     setLabels([])
     setPhases([])
+    setRuckMarkers([])
+    setRuckSelectedPlayerIds([])
     setSelectedPlayerId(null)
     setSelectionPopoverPos(null)
     setSelectedBall(false)
@@ -1058,6 +1163,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       cones: currentSnap.cones,
       labels: currentSnap.labels,
       team_colors: teamColors,
+      ruck_markers: currentSnap.ruckMarkers,
     }
   }, [
     activeFormation,
@@ -1112,6 +1218,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           phases: currentSnap.phaseMarkers,
           cones: currentSnap.cones,
           labels: currentSnap.labels,
+          ruckMarkers: currentSnap.ruckMarkers,
           phaseSnapshots: allPhaseSnapshots,
           currentPhase: currentPhaseView,
         }
@@ -1130,6 +1237,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           phases: currentSnap.phaseMarkers,
           cones: currentSnap.cones,
           labels: currentSnap.labels,
+          ruckMarkers: currentSnap.ruckMarkers,
           phaseSnapshots: allPhaseSnapshots,
           currentPhase: currentPhaseView,
         }
@@ -1213,6 +1321,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             cones: play.cones ?? [],
             labels: play.labels ?? [],
             phaseMarkers: play.phases ?? [],
+            ruckMarkers: play.ruckMarkers ?? [],
           },
         })
         setCurrentPhaseView(1)
@@ -1222,6 +1331,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
         setPhases(play.phases || [])
         setCones(play.cones || [])
         setLabels(play.labels || [])
+        setRuckMarkers(play.ruckMarkers ?? [])
       }
       setUndoStack([])
       setSelectedPlayerId(null)
@@ -1246,6 +1356,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setCones([])
     setLabels([])
     setPhases([])
+    setRuckMarkers([])
+    setRuckSelectedPlayerIds([])
+    setRuckHintDismissed(false)
     setPhaseSnapshots({ 1: createEmptyPhaseSnapshot() })
     setCurrentPhaseView(1)
     setActivePlayId(null)
@@ -1307,24 +1420,30 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setSelectedBall(false)
     setSelectedArrowId(null)
     setPasserSelected(null)
-  }, [])
+    clearRuckSelection()
+  }, [clearRuckSelection])
 
   const handleToolbarToolChange = useCallback(
     (tool: ToolbarTool) => {
       setToolbarTool(tool)
       setSelectedPlayerId(null)
+      clearRuckSelection()
       if (tool === "draw") {
         handleModeChange("draw")
       } else {
         handleModeChange("move")
       }
     },
-    [handleModeChange]
+    [handleModeChange, clearRuckSelection]
   )
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (ruckSelectedPlayerIds.length > 0) {
+          clearRuckSelection()
+          return
+        }
         if (selectedPlayerId) {
           setSelectedPlayerId(null)
           return
@@ -1338,7 +1457,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [toolbarTool, handleModeChange, selectedPlayerId])
+  }, [toolbarTool, handleModeChange, selectedPlayerId, ruckSelectedPlayerIds, clearRuckSelection])
 
   const handleAttackCustomColor = useCallback((color: string) => {
     setAttackCustomSwatches((prev) =>
@@ -1774,6 +1893,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       cones: [],
       labels: [],
       phaseMarkers: [],
+      ruckMarkers: [],
     }
     applyCanvasSnapshot(newSnap)
     persistCurrentPhaseSnapshot(currentPhaseView, newSnap)
@@ -1837,6 +1957,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           cones,
           labels,
           phaseMarkers: phases,
+          ruckMarkers,
         })
       }
 
@@ -1937,7 +2058,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             toolbarTool={toolbarTool}
             onToolbarToolChange={handleToolbarToolChange}
             arrowType={arrowType}
-            onArrowTypeChange={setArrowType}
+            onArrowTypeChange={handleToolbarArrowTypeChange}
             arrowColor={arrowColor}
             onArrowColorChange={setArrowColor}
             zoom={zoom}
@@ -1957,6 +2078,15 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             }}
           />
         )}
+
+        {!isPresentationMode &&
+        toolbarTool === "draw" &&
+        arrowType === "ruck" &&
+        !ruckHintDismissed ? (
+          <p className="shrink-0 border-b border-[#2a2a2a] bg-[#161616] py-1 text-center text-[10px] text-[#666]">
+            Click players to select, then click the field to set ruck point
+          </p>
+        ) : null}
 
         <div
           ref={fieldContainerRef}
@@ -2009,6 +2139,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             phases={phases}
             cones={cones}
             labels={labels}
+            ruckMarkers={ruckMarkers}
+            ruckSelectedPlayerIds={ruckSelectedPlayerIds}
+            onToggleRuckPlayer={handleToggleRuckPlayer}
+            onEraseRuck={handleEraseRuck}
             selectedPlayerId={selectedPlayerId}
             selectedBall={selectedBall}
             selectedArrowId={selectedArrowId}

@@ -14,6 +14,7 @@ import {
   Rows3,
   Shield,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { ARROW_TYPES, type ArrowType } from '@/lib/types'
 import type { FieldZone } from '@/lib/field-zones'
@@ -167,22 +168,31 @@ export function PlaybookDesignToolbar({
         {toolbarTool === 'draw' ? (
           <>
             <div className="flex max-w-[min(52vw,520px)] items-center gap-1 overflow-x-auto">
-              {ARROW_TYPES.map((at) => (
-                <button
-                  key={at.type}
-                  type="button"
-                  onClick={() => onArrowTypeChange(at.type)}
-                  className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
-                    arrowType === at.type
-                      ? 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
-                      : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#777] hover:text-[#aaa]'
-                  }`}
-                  style={{ borderWidth: '0.5px' }}
-                  title={at.description}
-                >
-                  {at.label}
-                </button>
-              ))}
+              {ARROW_TYPES.map((at) => {
+                const isRuck = at.type === 'ruck'
+                const isActive = arrowType === at.type
+                return (
+                  <button
+                    key={at.type}
+                    type="button"
+                    onClick={() => onArrowTypeChange(at.type)}
+                    className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
+                      isActive
+                        ? isRuck
+                          ? 'border-[#16a34a] bg-[#1a2a1a] text-[#86efac]'
+                          : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
+                        : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#777] hover:text-[#aaa]'
+                    }`}
+                    style={{ borderWidth: '0.5px' }}
+                    title={at.description}
+                  >
+                    {isRuck ? (
+                      <Users className="h-3 w-3 shrink-0" strokeWidth={2} />
+                    ) : null}
+                    {at.label}
+                  </button>
+                )
+              })}
             </div>
 
             <div

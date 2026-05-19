@@ -10,6 +10,8 @@ import {
   screenToSvgCoords,
   svgToScreenCoords,
 } from "@/lib/field-zones"
+import { buildAnimationGroupsFromArrows } from "@/lib/ruck-animation"
+import type { RuckMarker } from "@/lib/types"
 
 export interface RugbyFieldHandle {
   play: () => void
@@ -35,6 +37,7 @@ interface ArrowEditState {
 interface RugbyFieldProps {
   players: FieldPlayer[]
   arrows: Arrow[]
+  ruckMarkers?: RuckMarker[]
   ball: BallToken | null
   phases: PhaseMarker[]
   cones: ConeMarker[]
@@ -95,11 +98,15 @@ interface RugbyFieldProps {
   fieldZone?: FieldZone
   /** Select toolbar active — click token to pick colour without immediate drag */
   selectionToolActive?: boolean
+  ruckSelectedPlayerIds?: string[]
+  onToggleRuckPlayer?: (playerId: string) => void
+  onEraseRuck?: (ruckId: string) => void
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
   players = [],
   arrows = [],
+  ruckMarkers = [],
   ball,
   phases = [],
   cones = [],
@@ -156,6 +163,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   fieldViewBox = `0 0 ${FIELD_CANVAS_WIDTH} ${FIELD_CANVAS_HEIGHT}`,
   fieldZone = "full",
   selectionToolActive = false,
+  ruckSelectedPlayerIds = [],
+  onToggleRuckPlayer,
+  onEraseRuck,
 }: RugbyFieldProps, ref) {
   const tokenScale = fieldZone === "full" ? 1 : 0.5
   const isZoneFocus = fieldZone !== "full"
@@ -170,6 +180,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const ballRx = 1.2 * tokenScale
   const ballRy = 0.8 * tokenScale
   const ballFontSize = 0.5 * tokenScale
+  const ruckMarkerInnerR = 0.75 * tokenScale
+  const ruckMarkerOuterR = 1.15 * tokenScale
+  const ruckMarkerLabelSize = 0.35 * tokenScale
+  const isRuckDrawMode = mode === "draw" && arrowType === "ruck" && !eraseMode
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
     fromX: number
@@ -587,62 +601,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
     clearGroupTimeout()
 
-    const arrowsWithMeta = arrows.map((arrow, index) => ({
-      ...arrow,
-      sequence: (arrow as SequencedArrow).sequence,
-      timestamp: (arrow as SequencedArrow).timestamp,
-      _index: index,
-    }))
-
-    const sortedByTime = [...arrowsWithMeta].sort((a, b) => {
-      const aTs = a.timestamp ?? Number.MAX_SAFE_INTEGER
-      const bTs = b.timestamp ?? Number.MAX_SAFE_INTEGER
-      if (aTs !== bTs) return aTs - bTs
-      return a._index - b._index
-    })
-
-    let lastTimestamp: number | null = null
-    let generatedSequence = 0
-    const sequencedArrows = sortedByTime.map((arrow) => {
-      if (typeof arrow.sequence === "number") {
-        generatedSequence = Math.max(generatedSequence, arrow.sequence)
-        lastTimestamp = typeof arrow.timestamp === "number" ? arrow.timestamp : lastTimestamp
-        return arrow
-      }
-
-      if (typeof arrow.timestamp === "number") {
-        if (lastTimestamp === null || Math.abs(arrow.timestamp - lastTimestamp) >= 500) {
-          generatedSequence += 1
-        }
-        lastTimestamp = arrow.timestamp
-      } else {
-        generatedSequence += 1
-      }
-
-      return { ...arrow, sequence: generatedSequence }
-    })
-
-    const sortedArrows = [...sequencedArrows].sort((a, b) => {
-      const aSeq = a.sequence ?? Number.MAX_SAFE_INTEGER
-      const bSeq = b.sequence ?? Number.MAX_SAFE_INTEGER
-      if (aSeq !== bSeq) return aSeq - bSeq
-      const aTs = a.timestamp ?? Number.MAX_SAFE_INTEGER
-      const bTs = b.timestamp ?? Number.MAX_SAFE_INTEGER
-      if (aTs !== bTs) return aTs - bTs
-      return a._index - b._index
-    })
-
-    const grouped = sortedArrows.reduce<Record<number, SequencedArrow[]>>((acc, arrow) => {
-      const seq = arrow.sequence ?? 1
-      if (!acc[seq]) acc[seq] = []
-      acc[seq].push(arrow)
-      return acc
-    }, {})
-
-    animationGroupsRef.current = Object.keys(grouped)
-      .map((key) => Number(key))
-      .sort((a, b) => a - b)
-      .map((key) => grouped[key] ?? [])
+    animationGroupsRef.current = buildAnimationGroupsFromArrows(arrows)
 
     currentGroupRef.current = 0
     nextGroupStarted.current = false
@@ -651,7 +610,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     setAnimatedPositions({})
 
     console.log("Play clicked - players:", players.length)
-    console.log("Targets found:", sortedArrows.length)
+    console.log("Targets found:", arrows.length)
     console.log("Sample player id:", players[0]?.id)
     console.log("Sample arrow playerId:", arrows[0]?.playerId)
 
@@ -767,7 +726,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
   const handleFieldClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as SVGElement
-    if (target.closest(".player-token") || target.closest(".ball-token") || target.closest(".phase-token") || target.closest(".cone-token") || target.closest(".label-token") || target.closest(".arrow-path") || target.closest(".arrow-handle")) return
+    if (target.closest(".player-token") || target.closest(".ball-token") || target.closest(".phase-token") || target.closest(".cone-token") || target.closest(".label-token") || target.closest(".ruck-marker") || target.closest(".arrow-path") || target.closest(".arrow-handle")) return
     
     const { x, y } = getCanvasCoordinates(e)
     
@@ -797,7 +756,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       return
     }
     
-    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick") {
+    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck") {
       const snapToRunEndpoint = (playerId: string, clickX: number, clickY: number) => {
         const normalizedPlayerId = playerId.replace("attack-", "")
         const playerRunArrows = arrows.filter((a) =>
@@ -984,6 +943,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
     
     if (mode === "draw") {
+      if (arrowType === "ruck") {
+        onToggleRuckPlayer?.(player.id)
+        return
+      }
       if (arrowType === "pass") {
         onBallSelect(false)
         onArrowSelect(null)
@@ -1447,6 +1410,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const handleArrowClick = useCallback((e: React.MouseEvent, arrow: Arrow) => {
     e.stopPropagation()
     if (eraseMode) {
+      if (arrow.arrowType === "ruck" && arrow.ruckId && onEraseRuck) {
+        onEraseRuck(arrow.ruckId)
+        return
+      }
       onArrowDelete(arrow.id)
       return
     }
@@ -1455,7 +1422,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     onPlayerSelect(null)
     onBallSelect(false)
     onArrowSelect(selectedArrowId === arrow.id ? null : arrow.id)
-  }, [eraseMode, mode, selectedArrowId, onArrowSelect, onArrowDelete, onPlayerSelect, onBallSelect])
+  }, [eraseMode, mode, selectedArrowId, onArrowSelect, onArrowDelete, onPlayerSelect, onBallSelect, onEraseRuck])
 
   // Arrow handle dragging
   const handleArrowHandleMouseDown = useCallback((e: React.MouseEvent, arrow: Arrow, handleType: "start" | "mid" | "end") => {
@@ -1587,7 +1554,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   // Render arrow based on type
   const renderArrow = (arrow: Arrow) => {
     const getArrowVisualStart = (currentArrow: Arrow) => {
-      if (currentArrow.arrowType === "pass" || currentArrow.arrowType === "kick") {
+      if (
+        currentArrow.arrowType === "pass" ||
+        currentArrow.arrowType === "kick" ||
+        currentArrow.arrowType === "ruck"
+      ) {
         return { x: currentArrow.fromX, y: currentArrow.fromY }
       }
 
@@ -1596,6 +1567,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           a.id !== currentArrow.id &&
           a.arrowType !== "pass" &&
           a.arrowType !== "kick" &&
+          a.arrowType !== "ruck" &&
           (a.playerId === currentArrow.playerId ||
             a.playerId === currentArrow.playerId.replace("attack-", "") ||
             currentArrow.playerId === a.playerId.replace("attack-", ""))
@@ -1622,7 +1594,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         ? "#EAB308"
         : arrow.arrowType === "kick"
           ? "#F97316"
-          : getArrowColor(arrow.team))
+          : arrow.arrowType === "ruck"
+            ? arrow.color ?? "#16a34a"
+            : getArrowColor(arrow.team))
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - fromX
     const dy = arrow.toY - fromY
@@ -1808,6 +1782,29 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         )
         break
       }
+      case "ruck":
+        pathElement = (
+          <g key={arrow.id}>
+            <defs>
+              <marker id={markerId} {...arrowMarkerCommon}>
+                <polygon points="0 0, 6 2.5, 0 5" fill={color} />
+              </marker>
+            </defs>
+            <line
+              x1={fromX}
+              y1={fromY}
+              x2={arrow.toX}
+              y2={arrow.toY}
+              stroke={color}
+              strokeWidth={scaleArrowStroke(0.5)}
+              markerEnd={`url(#${markerId})`}
+              style={{ filter: glowFilter }}
+              className="arrow-path cursor-pointer"
+              onClick={(e) => handleArrowClick(e, arrow)}
+            />
+          </g>
+        )
+        break
       case "kick": {
         const kickCurve = getKickCurve(arrow.fromX, arrow.fromY, arrow.toX, arrow.toY)
         const { cp1x, cp1y, cp2x, cp2y } = kickCurve
@@ -1904,7 +1901,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       .pop()
     : null
   const selectedPlayerChainColor = selectedPlayerForRunChain ? getPlayerTokenColor(selectedPlayerForRunChain.team) : "#ffffff"
-  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && !!selectedPlayerLastRunArrow
+  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && !!selectedPlayerLastRunArrow
 
   return (
     <div
@@ -1932,7 +1929,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         viewBox={fieldViewBox}
         className={`${
           isZoneFocus ? "h-full w-full" : "max-h-full max-w-full"
-        } ${clickToPlaceActive || showRunChainStartIndicator ? "cursor-crosshair" : ""}`}
+        } ${clickToPlaceActive || showRunChainStartIndicator || isRuckDrawMode ? "cursor-crosshair" : ""}`}
         style={{
           filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))",
           ...(isZoneFocus
@@ -2043,6 +2040,42 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
+        {ruckMarkers.map((marker) => (
+          <g
+            key={marker.id}
+            className="ruck-marker cursor-pointer"
+            transform={`translate(${marker.x}, ${marker.y})`}
+            onMouseDown={(e) => {
+              e.stopPropagation()
+              if (eraseMode && onEraseRuck) {
+                onEraseRuck(marker.ruckId)
+              }
+            }}
+          >
+            <circle
+              r={ruckMarkerOuterR}
+              fill="none"
+              stroke="#16a34a"
+              strokeWidth={0.075 * tokenScale}
+              opacity={0.6}
+            />
+            <circle
+              r={ruckMarkerInnerR}
+              fill="#16a34a"
+              fillOpacity={0.9}
+            />
+            <text
+              y={0.12 * tokenScale}
+              fontSize={ruckMarkerLabelSize}
+              fill="white"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className="pointer-events-none font-bold select-none"
+            >
+              RUCK
+            </text>
+          </g>
+        ))}
         {showRunChainStartIndicator && selectedPlayerLastRunArrow && (
           <g className="pointer-events-none">
             <circle
@@ -2190,6 +2223,15 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             />
             {mode === "draw" && arrowType === "pass" && passerSelected === player.id && (
               <circle r={passHighlightRadius} fill="none" stroke="#EAB308" strokeWidth={0.25 * tokenScale} className="animate-pulse" />
+            )}
+            {ruckSelectedPlayerIds.includes(player.id) && (
+              <circle
+                r={tokenRadius + 0.35 * tokenScale}
+                fill="none"
+                stroke="#16a34a"
+                strokeWidth={0.2 * tokenScale}
+                className="animate-pulse pointer-events-none"
+              />
             )}
             <text
               y={0.1 * tokenScale}
