@@ -179,7 +179,7 @@ export function PlaybookDesignToolbar({
                     className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-medium transition-colors ${
                       isActive
                         ? isRuck
-                          ? 'border-[#16a34a] bg-[#1a2a1a] text-[#86efac]'
+                          ? 'border-[#ec4899] bg-[#2a0a1a] text-[#ec4899]'
                           : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
                         : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#777] hover:text-[#aaa]'
                     }`}

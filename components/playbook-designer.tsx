@@ -892,7 +892,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           toY: y,
           arrowType: "ruck",
           ruckId,
-          color: "#16a34a",
+          color: "#ec4899",
           timestamp: arrowTimestamp,
         })
       })

@@ -1595,7 +1595,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         : arrow.arrowType === "kick"
           ? "#F97316"
           : arrow.arrowType === "ruck"
-            ? arrow.color ?? "#16a34a"
+            ? arrow.color ?? "#ec4899"
             : getArrowColor(arrow.team))
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - fromX
@@ -2055,13 +2055,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <circle
               r={ruckMarkerOuterR}
               fill="none"
-              stroke="#16a34a"
+              stroke="#ec4899"
               strokeWidth={0.075 * tokenScale}
               opacity={0.6}
             />
             <circle
               r={ruckMarkerInnerR}
-              fill="#16a34a"
+              fill="#ec4899"
               fillOpacity={0.9}
             />
             <text
@@ -2228,7 +2228,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
               <circle
                 r={tokenRadius + 0.35 * tokenScale}
                 fill="none"
-                stroke="#16a34a"
+                stroke="#ec4899"
                 strokeWidth={0.2 * tokenScale}
                 className="animate-pulse pointer-events-none"
               />
