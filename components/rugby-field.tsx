@@ -167,6 +167,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const passHighlightRadius = basePassHighlightRadius * tokenScale
   const tokenNumberFontSize = baseNumberFontSize * tokenScale
   const tokenAbbrFontSize = baseAbbrFontSize * tokenScale
+  const ballRx = 1.2 * tokenScale
+  const ballRy = 0.8 * tokenScale
+  const ballFontSize = 0.5 * tokenScale
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
     fromX: number
@@ -2102,16 +2105,16 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
                 onContextMenu={(e) => handleContextMenu(e, "ball", "ball")}
               >
                 <ellipse
-                  rx="1.2"
-                  ry="0.8"
+                  rx={ballRx}
+                  ry={ballRy}
                   fill="#EAB308"
                   stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.3)"}
-                  strokeWidth={selectedBall ? "0.3" : "0.1"}
+                  strokeWidth={selectedBall ? 0.3 * tokenScale : 0.1 * tokenScale}
                   className="transition-all"
                 />
                 <text
-                  y="0.25"
-                  fontSize="0.5"
+                  y={0.25 * tokenScale}
+                  fontSize={ballFontSize}
                   fill="#000"
                   textAnchor="middle"
                   dominantBaseline="middle"
@@ -2125,7 +2128,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
           return (
             <g className="pointer-events-none" transform={`translate(${ballRenderPos.x}, ${ballRenderPos.y})`}>
-              <ellipse rx="1.2" ry="0.8" fill="#EAB308" stroke="rgba(0,0,0,0.3)" strokeWidth="0.1" />
+              <ellipse rx={ballRx} ry={ballRy} fill="#EAB308" stroke="rgba(0,0,0,0.3)" strokeWidth={0.1 * tokenScale} />
             </g>
           )
         })()}
