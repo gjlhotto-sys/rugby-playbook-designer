@@ -3,6 +3,13 @@
 import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { ARROW_TYPES } from "@/lib/types"
+import {
+  FIELD_CANVAS_HEIGHT,
+  FIELD_CANVAS_WIDTH,
+  type FieldZone,
+  screenToSvgCoords,
+  svgToScreenCoords,
+} from "@/lib/field-zones"
 
 export interface RugbyFieldHandle {
   play: () => void
@@ -82,6 +89,10 @@ interface RugbyFieldProps {
   hideControls?: boolean
   onAnimationStateChange?: (playing: boolean) => void
   eraseMode?: boolean
+  /** SVG viewBox — defaults to full field; zone focus narrows visible area */
+  fieldViewBox?: string
+  /** Active zone focus — scales on-field player tokens when not full */
+  fieldZone?: FieldZone
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -140,7 +151,18 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   hideControls = false,
   onAnimationStateChange,
   eraseMode = false,
+  fieldViewBox = `0 0 ${FIELD_CANVAS_WIDTH} ${FIELD_CANVAS_HEIGHT}`,
+  fieldZone = "full",
 }: RugbyFieldProps, ref) {
+  const tokenScale = fieldZone === "full" ? 1 : 0.8
+  const baseTokenRadius = 1.6
+  const basePassHighlightRadius = 2.2
+  const baseNumberFontSize = 1
+  const baseAbbrFontSize = 0.7
+  const tokenRadius = baseTokenRadius * tokenScale
+  const passHighlightRadius = basePassHighlightRadius * tokenScale
+  const tokenNumberFontSize = baseNumberFontSize * tokenScale
+  const tokenAbbrFontSize = baseAbbrFontSize * tokenScale
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
   type KickCurve = {
     fromX: number
@@ -688,19 +710,29 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
   // SVG coordinate system: buffer zone adds 6 units on each side
   const BUFFER = 6
-  const CANVAS_WIDTH = 70 + BUFFER * 2
-  const CANVAS_HEIGHT = 120 + BUFFER * 2
+  const CANVAS_WIDTH = FIELD_CANVAS_WIDTH
+  const CANVAS_HEIGHT = FIELD_CANVAS_HEIGHT
 
-  const getCanvasCoordinates = useCallback((e: React.MouseEvent | React.DragEvent | MouseEvent) => {
-    if (!svgRef.current) return { x: 0, y: 0 }
-    const rect = svgRef.current.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * CANVAS_WIDTH
-    const y = ((e.clientY - rect.top) / rect.height) * CANVAS_HEIGHT
-    return { 
-      x: Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, x)), 
-      y: Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, y)) 
-    }
-  }, [])
+  const clampSvgCoords = useCallback((x: number, y: number) => ({
+    x: Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, x)),
+    y: Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, y)),
+  }), [])
+
+  const pointerToSvg = useCallback(
+    (clientX: number, clientY: number) => {
+      if (!svgRef.current) return { x: 0, y: 0 }
+      const rect = svgRef.current.getBoundingClientRect()
+      const { x, y } = screenToSvgCoords(clientX, clientY, rect, fieldViewBox)
+      return clampSvgCoords(x, y)
+    },
+    [clampSvgCoords, fieldViewBox]
+  )
+
+  const getCanvasCoordinates = useCallback(
+    (e: React.MouseEvent | React.DragEvent | MouseEvent) =>
+      pointerToSvg(e.clientX, e.clientY),
+    [pointerToSvg]
+  )
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -884,16 +916,16 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     if (!svgRef.current) return
 
     const rect = svgRef.current.getBoundingClientRect()
-    const clickX = e.clientX - rect.left
-    const clickY = e.clientY - rect.top
-    const xScale = rect.width / CANVAS_WIDTH
-    const yScale = rect.height / CANVAS_HEIGHT
 
     for (const arrow of arrows) {
       if (arrow.arrowType === "pass") continue
-      const endX = arrow.toX * xScale
-      const endY = arrow.toY * yScale
-      const dist = Math.hypot(clickX - endX, clickY - endY)
+      const { x: endX, y: endY } = svgToScreenCoords(
+        arrow.toX,
+        arrow.toY,
+        rect,
+        fieldViewBox
+      )
+      const dist = Math.hypot(e.clientX - endX, e.clientY - endY)
       if (dist < 30) {
         e.preventDefault()
         e.stopPropagation()
@@ -902,9 +934,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
 
     for (const player of players) {
-      const px = player.x * xScale
-      const py = player.y * yScale
-      const dist = Math.hypot(clickX - px, clickY - py)
+      const { x: px, y: py } = svgToScreenCoords(
+        player.x,
+        player.y,
+        rect,
+        fieldViewBox
+      )
+      const dist = Math.hypot(e.clientX - px, e.clientY - py)
       if (dist < 20) {
         const runArrow = arrows.find((a) =>
           (a.playerId === player.id ||
@@ -921,7 +957,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         if (tryCreatePassToPoint(targetX, targetY, player.id)) return
       }
     }
-  }, [mode, arrowType, passerSelected, arrows, players, tryCreatePassToPoint])
+  }, [mode, arrowType, passerSelected, arrows, players, tryCreatePassToPoint, fieldViewBox])
 
   const handlePlayerMouseDown = useCallback((e: React.MouseEvent, player: FieldPlayer) => {
     e.stopPropagation()
@@ -1057,8 +1093,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || draggingRef.current.type !== "player" || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX
-      const newY = ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = pt.x - draggingRef.current.offsetX
+      const newY = pt.y - draggingRef.current.offsetY
       
       onPlayerDrag(
         draggingRef.current.id,
@@ -1172,8 +1209,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || draggingRef.current.type !== "ball" || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX
-      const newY = ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = pt.x - draggingRef.current.offsetX
+      const newY = pt.y - draggingRef.current.offsetY
       
       onBallDrag(
         Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
@@ -1218,8 +1256,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || draggingRef.current.type !== "phase" || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX
-      const newY = ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = pt.x - draggingRef.current.offsetX
+      const newY = pt.y - draggingRef.current.offsetY
       
       onPhaseDrag(
         draggingRef.current.id,
@@ -1265,8 +1304,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || draggingRef.current.type !== "cone" || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX
-      const newY = ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = pt.x - draggingRef.current.offsetX
+      const newY = pt.y - draggingRef.current.offsetY
       
       onConeDrag(
         draggingRef.current.id,
@@ -1312,8 +1352,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || draggingRef.current.type !== "label" || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX
-      const newY = ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = pt.x - draggingRef.current.offsetX
+      const newY = pt.y - draggingRef.current.offsetY
       
       onLabelDrag(
         draggingRef.current.id,
@@ -1370,8 +1411,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (!draggingRef.current || !svgRef.current) return
       
       const rect = svgRef.current.getBoundingClientRect()
-      const newX = Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, ((moveEvent.clientX - rect.left) / rect.width) * CANVAS_WIDTH - draggingRef.current.offsetX))
-      const newY = Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, ((moveEvent.clientY - rect.top) / rect.height) * CANVAS_HEIGHT - draggingRef.current.offsetY))
+      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+      const newX = Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, pt.x - draggingRef.current.offsetX))
+      const newY = Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, pt.y - draggingRef.current.offsetY))
       
       if (draggingRef.current.type === "arrow-start") {
         onArrowUpdate(arrow.id, { fromX: newX, fromY: newY })
@@ -1749,10 +1791,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     const rect = svgRef.current.getBoundingClientRect()
     const midX = (arrow.fromX + arrow.toX) / 2
     const midY = (arrow.fromY + arrow.toY) / 2
-    return {
-      x: rect.left + (midX / CANVAS_WIDTH) * rect.width,
-      y: rect.top + (midY / CANVAS_HEIGHT) * rect.height,
-    }
+    return svgToScreenCoords(midX, midY, rect, fieldViewBox)
   }
 
   const selectedArrow = arrows.find(a => a.id === selectedArrowId)
@@ -1798,12 +1837,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       )}
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+        viewBox={fieldViewBox}
         className={`max-w-full ${clickToPlaceActive || showRunChainStartIndicator ? "cursor-crosshair" : ""}`}
-        style={{ 
+        style={{
           filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))",
           height: `${zoom}%`,
           maxHeight: "100%",
+          transition: "opacity 0.2s ease",
         }}
         preserveAspectRatio="xMidYMid meet"
         onDragOver={handleDragOver}
@@ -2047,18 +2087,18 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             onContextMenu={(e) => handleContextMenu(e, player.id, "player")}
           >
             <circle
-              r="1.6"
+              r={tokenRadius}
               fill={player.color ?? getPlayerTokenColor(player.team)}
               stroke={selectedPlayerId === player.id ? "#ffffff" : "rgba(0,0,0,0.3)"}
-              strokeWidth={selectedPlayerId === player.id ? "0.3" : "0.1"}
+              strokeWidth={selectedPlayerId === player.id ? 0.3 * tokenScale : 0.1 * tokenScale}
               className="transition-all"
             />
             {mode === "draw" && arrowType === "pass" && passerSelected === player.id && (
-              <circle r="2.2" fill="none" stroke="#EAB308" strokeWidth="0.25" className="animate-pulse" />
+              <circle r={passHighlightRadius} fill="none" stroke="#EAB308" strokeWidth={0.25 * tokenScale} className="animate-pulse" />
             )}
             <text
-              y="0.1"
-              fontSize="1"
+              y={0.1 * tokenScale}
+              fontSize={tokenNumberFontSize}
               fill="white"
               textAnchor="middle"
               dominantBaseline="middle"
@@ -2067,8 +2107,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
               {player.number}
             </text>
             <text
-              y="1.1"
-              fontSize="0.7"
+              y={1.1 * tokenScale}
+              fontSize={tokenAbbrFontSize}
               fill="white"
               textAnchor="middle"
               className="pointer-events-none select-none"

@@ -12,6 +12,7 @@ import { PlaybookDesignToolbar, type ToolbarTool } from "./playbook-design-toolb
 import { PlaybookDesignStatusBar } from "./playbook-design-status-bar"
 import { PlaybookColorPickerPopover } from "./playbook-color-picker-popover"
 import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
+import { getViewBoxForZone, type FieldZone } from "@/lib/field-zones"
 import { Menu, X } from "lucide-react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot } from "@/lib/types"
 import { RUGBY_POSITIONS } from "@/lib/types"
@@ -111,6 +112,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [zoom, setZoom] = useState(1)
   const [panX, setPanX] = useState(0)
   const [panY, setPanY] = useState(0)
+  const [activeZone, setActiveZone] = useState<FieldZone>("full")
+  const fieldViewBox = getViewBoxForZone(activeZone)
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [isExportingVideo, setIsExportingVideo] = useState(false)
   const [exportVideoProgress, setExportVideoProgress] = useState(0)
@@ -1222,6 +1225,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setActivePlayId(play.id)
       setHasUnsavedChanges(false)
       setShowPhaseCopyBanner(false)
+      setActiveZone("full")
     },
     [applyCanvasSnapshot]
   )
@@ -1247,6 +1251,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setSelectedPlacementToken(null)
     setHasUnsavedChanges(false)
     setShowPhaseCopyBanner(false)
+    setActiveZone("full")
     fieldRef.current?.reset()
   }, [])
 
@@ -1931,6 +1936,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             canAnimate={arrows.length > 0}
             onClearField={handleClearField}
             onPresent={handleEnterPresentation}
+            activeZone={activeZone}
+            onZoneChange={(zone) => {
+              setActiveZone(zone)
+              setPanX(0)
+              setPanY(0)
+            }}
           />
         )}
 
@@ -1969,7 +1980,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             style={{
               transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
               transformOrigin: "top center",
-              transition: isPanning.current ? "none" : "transform 0.15s ease",
+              transition: isPanning.current ? "none" : "transform 0.3s ease",
               width: "100%",
               height: "100%",
               cursor: zoom > 1 ? "grab" : "default",
@@ -1991,6 +2002,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             passerSelected={passerSelected}
             teamColors={teamColors}
             zoom={100}
+            fieldViewBox={fieldViewBox}
+            fieldZone={activeZone}
             clickToPlaceActive={selectedPlacementToken !== null}
             onFieldClick={handleFieldClick}
             onPlayerDrop={handlePlayerDrop}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
+  ArrowUp,
   Eraser,
   Maximize2,
   Minus,
@@ -10,9 +11,12 @@ import {
   Pencil,
   Play,
   Plus,
+  Rows3,
+  Shield,
   Trash2,
 } from 'lucide-react'
 import { ARROW_TYPES, type ArrowType } from '@/lib/types'
+import type { FieldZone } from '@/lib/field-zones'
 import { PlaybookColorPickerPopover } from './playbook-color-picker-popover'
 
 export type ToolbarTool = 'select' | 'draw' | 'erase'
@@ -33,6 +37,8 @@ interface PlaybookDesignToolbarProps {
   canAnimate: boolean
   onClearField: () => void
   onPresent: () => void
+  activeZone: FieldZone
+  onZoneChange: (zone: FieldZone) => void
 }
 
 export function PlaybookDesignToolbar({
@@ -51,7 +57,19 @@ export function PlaybookDesignToolbar({
   canAnimate,
   onClearField,
   onPresent,
+  activeZone,
+  onZoneChange,
 }: PlaybookDesignToolbarProps) {
+  const zoneButtons: {
+    id: FieldZone
+    label: string
+    icon: typeof Maximize2
+  }[] = [
+    { id: 'full', label: 'Full Field', icon: Maximize2 },
+    { id: 'attack', label: 'Attack Zone', icon: ArrowUp },
+    { id: 'mid', label: 'Mid Zone', icon: Rows3 },
+    { id: 'defence', label: 'Defence Zone', icon: Shield },
+  ]
   const [arrowColorOpen, setArrowColorOpen] = useState(false)
   const arrowColorBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -99,6 +117,35 @@ export function PlaybookDesignToolbar({
               {label}
             </button>
           ))}
+        </div>
+
+        <div
+          className="h-6 w-px shrink-0 bg-[#2a2a2a]"
+          style={{ width: '0.5px' }}
+          aria-hidden
+        />
+
+        <div className="flex items-center gap-0.5">
+          {zoneButtons.map(({ id, label, icon: Icon }) => {
+            const isActive = activeZone === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onZoneChange(id)}
+                className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${
+                  isActive
+                    ? 'border border-[#2563eb] bg-[#1a2a3a] text-[#93c5fd]'
+                    : 'border border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-[#ccc]'
+                }`}
+                style={{ borderWidth: '0.5px' }}
+                title={label}
+              >
+                <Icon className="h-3 w-3 shrink-0" strokeWidth={2} />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            )
+          })}
         </div>
 
         <div
