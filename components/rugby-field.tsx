@@ -154,7 +154,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   fieldViewBox = `0 0 ${FIELD_CANVAS_WIDTH} ${FIELD_CANVAS_HEIGHT}`,
   fieldZone = "full",
 }: RugbyFieldProps, ref) {
-  const tokenScale = fieldZone === "full" ? 1 : 0.8
+  const tokenScale = fieldZone === "full" ? 1 : 0.5
+  const isZoneFocus = fieldZone !== "full"
   const baseTokenRadius = 1.6
   const basePassHighlightRadius = 2.2
   const baseNumberFontSize = 1
@@ -1818,9 +1819,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     <div
       ref={containerRef}
       data-field-canvas
-      className={`relative h-full w-full flex items-center justify-center ${
-        clickToPlaceActive ? "ring-2 ring-primary/60 rounded-md animate-pulse" : ""
-      }`}
+      className={`relative h-full w-full flex ${
+        isZoneFocus ? "items-stretch" : "items-center justify-center"
+      } ${clickToPlaceActive ? "ring-2 ring-primary/60 rounded-md animate-pulse" : ""}`}
     >
       {arrows.length > 0 && !hideControls && (
         <div className="absolute top-2 left-1/2 z-40 -translate-x-1/2 flex items-center gap-2 rounded-md border border-border bg-card/90 px-2 py-1">
@@ -1838,14 +1839,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       <svg
         ref={svgRef}
         viewBox={fieldViewBox}
-        className={`max-w-full ${clickToPlaceActive || showRunChainStartIndicator ? "cursor-crosshair" : ""}`}
+        className={`${
+          isZoneFocus ? "h-full w-full" : "max-h-full max-w-full"
+        } ${clickToPlaceActive || showRunChainStartIndicator ? "cursor-crosshair" : ""}`}
         style={{
           filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))",
-          height: `${zoom}%`,
-          maxHeight: "100%",
+          ...(isZoneFocus
+            ? { width: "100%", height: "100%" }
+            : { height: `${zoom}%`, maxHeight: "100%" }),
           transition: "opacity 0.2s ease",
         }}
-        preserveAspectRatio="xMidYMid meet"
+        preserveAspectRatio={isZoneFocus ? "none" : "xMidYMid meet"}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onMouseDownCapture={handlePassCanvasMouseDownCapture}

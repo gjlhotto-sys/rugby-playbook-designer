@@ -1947,9 +1947,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
         <div
           ref={fieldContainerRef}
-          className={`relative min-h-0 flex-1 bg-[#0f0f0f] p-2 ${
-            toolbarTool === "erase" ? "cursor-crosshair" : ""
-          }`}
+          className={`relative min-h-0 flex-1 bg-[#0f0f0f] ${
+            activeZone === "full" ? "p-2" : "p-0"
+          } ${toolbarTool === "erase" ? "cursor-crosshair" : ""}`}
           onMouseDown={(e) => {
             if (zoom <= 1) return
             if (e.altKey || e.button === 1) {
@@ -1976,13 +1976,15 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           }}
         >
           <div
-            className="rugby-field-container"
+            className="rugby-field-container flex"
             style={{
               transform: `scale(${zoom}) translate(${panX}px, ${panY}px)`,
-              transformOrigin: "top center",
+              transformOrigin: activeZone === "full" ? "top center" : "center center",
               transition: isPanning.current ? "none" : "transform 0.3s ease",
               width: "100%",
               height: "100%",
+              display: "flex",
+              alignItems: activeZone === "full" ? "center" : "stretch",
               cursor: zoom > 1 ? "grab" : "default",
             }}
           >
