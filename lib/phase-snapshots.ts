@@ -3,7 +3,7 @@ import type { Arrow, FieldPlayer, PhaseSnapshot } from './types'
 type SequencedArrow = Arrow & { timestamp?: number }
 
 function arrowBelongsToPlayer(arrow: Arrow, player: FieldPlayer): boolean {
-  if (arrow.arrowType === 'pass' || arrow.arrowType === 'kick') {
+  if (arrow.arrowType === 'pass' || arrow.arrowType === 'kick' || arrow.arrowType === 'ruck') {
     return false
   }
   const playerKeys = new Set([

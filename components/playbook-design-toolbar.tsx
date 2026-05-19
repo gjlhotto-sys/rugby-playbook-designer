@@ -8,6 +8,7 @@ import {
   Minus,
   MousePointer2,
   Pause,
+  PenLine,
   Pencil,
   Play,
   Plus,
@@ -170,6 +171,7 @@ export function PlaybookDesignToolbar({
             <div className="flex max-w-[min(52vw,520px)] items-center gap-1 overflow-x-auto">
               {ARROW_TYPES.map((at) => {
                 const isRuck = at.type === 'ruck'
+                const isFreeDraw = at.type === 'freedraw'
                 const isActive = arrowType === at.type
                 return (
                   <button
@@ -180,7 +182,9 @@ export function PlaybookDesignToolbar({
                       isActive
                         ? isRuck
                           ? 'border-[#ec4899] bg-[#2a0a1a] text-[#ec4899]'
-                          : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
+                          : isFreeDraw
+                            ? 'border-[#a855f7] bg-[#1a1a2e] text-[#c084fc]'
+                            : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
                         : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#777] hover:text-[#aaa]'
                     }`}
                     style={{ borderWidth: '0.5px' }}
@@ -188,6 +192,8 @@ export function PlaybookDesignToolbar({
                   >
                     {isRuck ? (
                       <Users className="h-3 w-3 shrink-0" strokeWidth={2} />
+                    ) : isFreeDraw ? (
+                      <PenLine className="h-3 w-3 shrink-0" strokeWidth={2} />
                     ) : null}
                     {at.label}
                   </button>

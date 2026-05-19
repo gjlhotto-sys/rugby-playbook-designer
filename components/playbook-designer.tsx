@@ -74,6 +74,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [ruckMarkers, setRuckMarkers] = useState<RuckMarker[]>([])
   const [ruckSelectedPlayerIds, setRuckSelectedPlayerIds] = useState<string[]>([])
   const [ruckHintDismissed, setRuckHintDismissed] = useState(false)
+  const [freeDrawHintDismissed, setFreeDrawHintDismissed] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedBall, setSelectedBall] = useState(false)
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
@@ -867,6 +868,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
     if (mode !== "draw") return
 
+    if (arrowType === "freedraw") return
+
     if (arrowType === "ruck") {
       if (ruckSelectedPlayerIds.length === 0) return
 
@@ -928,7 +931,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             a.playerId === `defense-${player.number}`) &&
           a.arrowType !== "pass" &&
           a.arrowType !== "kick" &&
-          a.arrowType !== "ruck"
+          a.arrowType !== "ruck" &&
+          a.arrowType !== "freedraw"
         )
         .sort((a, b) => ((a as { timestamp?: number }).timestamp ?? 0) - ((b as { timestamp?: number }).timestamp ?? 0))
         .pop()
@@ -996,6 +1000,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     },
     [clearRuckSelection]
   )
+
+  const handleFreeDrawArrowAdd = useCallback((arrow: Arrow) => {
+    setArrows((prev) => [...prev, arrow])
+    setUndoStack((prev) => [...prev, { type: "add_arrow", arrow }])
+    setFreeDrawHintDismissed(true)
+  }, [])
 
   const handleDeletePlayer = useCallback((playerId: string) => {
     setFieldPlayers(prev => prev.filter(p => p.id !== playerId))
@@ -2088,6 +2098,15 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           </p>
         ) : null}
 
+        {!isPresentationMode &&
+        toolbarTool === "draw" &&
+        arrowType === "freedraw" &&
+        !freeDrawHintDismissed ? (
+          <p className="shrink-0 border-b border-[#2a2a2a] bg-[#161616] py-1 text-center text-[10px] text-[#666]">
+            Click a player then drag to draw path
+          </p>
+        ) : null}
+
         <div
           ref={fieldContainerRef}
           className={`relative min-h-0 flex-1 bg-[#0f0f0f] ${
@@ -2143,6 +2162,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             ruckSelectedPlayerIds={ruckSelectedPlayerIds}
             onToggleRuckPlayer={handleToggleRuckPlayer}
             onEraseRuck={handleEraseRuck}
+            arrowColor={arrowColor}
+            onFreeDrawArrowAdd={handleFreeDrawArrowAdd}
+            onFreeDrawStarted={() => setFreeDrawHintDismissed(true)}
             selectedPlayerId={selectedPlayerId}
             selectedBall={selectedBall}
             selectedArrowId={selectedArrowId}

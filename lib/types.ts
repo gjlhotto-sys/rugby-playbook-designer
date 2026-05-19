@@ -43,7 +43,12 @@ export interface TextLabel {
   y: number
 }
 
-export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short" | "kick" | "ruck"
+export type ArrowType = "run" | "decoy" | "curve" | "pass" | "z-left" | "z-right" | "loop" | "short" | "kick" | "ruck" | "freedraw"
+
+export interface PathPoint {
+  x: number
+  y: number
+}
 
 export interface Arrow {
   id: string
@@ -57,6 +62,10 @@ export interface Arrow {
   receiverId?: string
   color?: string
   ruckId?: string
+  /** Smoothed waypoints for freedraw arrows */
+  points?: PathPoint[]
+  /** Pre-computed SVG path for freedraw rendering */
+  pathD?: string
 }
 
 export interface RuckMarker {
@@ -163,6 +172,7 @@ export const ARROW_TYPES: { type: ArrowType; label: string; description: string 
   { type: "short", label: "Short", description: "Short gain with tick" },
   { type: "kick", label: "Kick", description: "Kick down or cross field" },
   { type: "ruck", label: "Ruck", description: "Multiple players converge on one point" },
+  { type: "freedraw", label: "FreeDraw", description: "Draw a freehand path on the field" },
 ]
 
 export const RUGBY_POSITIONS: PlayerTemplate[] = [

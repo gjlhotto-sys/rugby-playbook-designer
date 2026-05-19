@@ -11,6 +11,14 @@ import {
   svgToScreenCoords,
 } from "@/lib/field-zones"
 import { buildAnimationGroupsFromArrows } from "@/lib/ruck-animation"
+import {
+  buildFreeDrawArrowFromRaw,
+  dist as pathDist,
+  ensureFreeDrawPathD,
+  interpolateAlongPoints,
+  pointsToPolylinePath,
+  type PathPoint,
+} from "@/lib/freedraw-path"
 import type { RuckMarker } from "@/lib/types"
 
 export interface RugbyFieldHandle {
@@ -101,6 +109,9 @@ interface RugbyFieldProps {
   ruckSelectedPlayerIds?: string[]
   onToggleRuckPlayer?: (playerId: string) => void
   onEraseRuck?: (ruckId: string) => void
+  arrowColor?: string
+  onFreeDrawArrowAdd?: (arrow: Arrow) => void
+  onFreeDrawStarted?: () => void
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -166,6 +177,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   ruckSelectedPlayerIds = [],
   onToggleRuckPlayer,
   onEraseRuck,
+  arrowColor = "#2563eb",
+  onFreeDrawArrowAdd,
+  onFreeDrawStarted,
 }: RugbyFieldProps, ref) {
   const tokenScale = fieldZone === "full" ? 1 : 0.5
   const isZoneFocus = fieldZone !== "full"
@@ -184,7 +198,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const ruckMarkerOuterR = 1.15 * tokenScale
   const ruckMarkerLabelSize = 0.35 * tokenScale
   const isRuckDrawMode = mode === "draw" && arrowType === "ruck" && !eraseMode
+  const isFreeDrawMode = mode === "draw" && arrowType === "freedraw" && !eraseMode
+  const [freeDrawSourcePlayerId, setFreeDrawSourcePlayerId] = useState<string | null>(null)
+  const [freeDrawPreview, setFreeDrawPreview] = useState<PathPoint[] | null>(null)
+  const freeDrawSessionRef = useRef<{
+    playerId: string
+    team: "attack" | "defense"
+    rawPoints: PathPoint[]
+  } | null>(null)
+  const freedrawPathsRef = useRef<Record<string, PathPoint[]>>({})
   type SequencedArrow = Arrow & { timestamp?: number; sequence?: number }
+
   type KickCurve = {
     fromX: number
     fromY: number
@@ -352,9 +376,14 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           )
           newPositions[id] = p
         } else {
-          newPositions[id] = {
-            x: start.x + (target.x - start.x) * progress,
-            y: start.y + (target.y - start.y) * progress,
+          const freedrawPts = freedrawPathsRef.current[id]
+          if (freedrawPts && freedrawPts.length >= 2) {
+            newPositions[id] = interpolateAlongPoints(freedrawPts, progress)
+          } else {
+            newPositions[id] = {
+              x: start.x + (target.x - start.x) * progress,
+              y: start.y + (target.y - start.y) * progress,
+            }
           }
         }
       }
@@ -464,6 +493,19 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         return
       }
 
+      if (arrow.arrowType === "freedraw" && arrow.points && arrow.points.length >= 2) {
+        if (player) {
+          const pts = arrow.points
+          freedrawPathsRef.current[player.id] = pts
+          const playerStart = getPlayerCurrentPos(player.id)
+          if (playerStart) {
+            starts[player.id] = playerStart
+            targets[player.id] = pts[pts.length - 1]
+          }
+        }
+        return
+      }
+
       if (player) {
         const playerStart = getPlayerCurrentPos(player.id)
         if (playerStart) {
@@ -509,9 +551,14 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             )
             newPositions[id] = p
           } else {
-            newPositions[id] = {
-              x: start.x + (target.x - start.x) * progress,
-              y: start.y + (target.y - start.y) * progress,
+            const freedrawPts = freedrawPathsRef.current[id]
+            if (freedrawPts && freedrawPts.length >= 2) {
+              newPositions[id] = interpolateAlongPoints(freedrawPts, progress)
+            } else {
+              newPositions[id] = {
+                x: start.x + (target.x - start.x) * progress,
+                y: start.y + (target.y - start.y) * progress,
+              }
             }
           }
         }
@@ -602,6 +649,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     clearGroupTimeout()
 
     animationGroupsRef.current = buildAnimationGroupsFromArrows(arrows)
+    freedrawPathsRef.current = {}
 
     currentGroupRef.current = 0
     nextGroupStarted.current = false
@@ -700,6 +748,80 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     [pointerToSvg]
   )
 
+  const cancelFreeDraw = useCallback(() => {
+    freeDrawSessionRef.current = null
+    setFreeDrawPreview(null)
+  }, [])
+
+  const finalizeFreeDraw = useCallback(() => {
+    const session = freeDrawSessionRef.current
+    freeDrawSessionRef.current = null
+    setFreeDrawPreview(null)
+    if (!session) return
+
+    const player = players.find((p) => p.id === session.playerId)
+    if (!player) return
+
+    const arrow = buildFreeDrawArrowFromRaw(session.rawPoints, player, arrowColor)
+    if (arrow) {
+      onFreeDrawArrowAdd?.(arrow)
+    }
+  }, [players, arrowColor, onFreeDrawArrowAdd])
+
+  const startFreeDrawSession = useCallback(
+    (player: FieldPlayer, e: React.MouseEvent) => {
+      const pt = getCanvasCoordinates(e)
+      freeDrawSessionRef.current = {
+        playerId: player.id,
+        team: player.team,
+        rawPoints: [pt],
+      }
+      setFreeDrawPreview([pt])
+      onFreeDrawStarted?.()
+
+      const handlePointerMove = (ev: PointerEvent) => {
+        const session = freeDrawSessionRef.current
+        if (!session) return
+        const clamped = pointerToSvg(ev.clientX, ev.clientY)
+        const last = session.rawPoints[session.rawPoints.length - 1]
+        if (pathDist(last, clamped) < 0.12) return
+        session.rawPoints.push(clamped)
+        setFreeDrawPreview([...session.rawPoints])
+      }
+
+      const handlePointerUp = () => {
+        finalizeFreeDraw()
+        window.removeEventListener("pointermove", handlePointerMove)
+        window.removeEventListener("pointerup", handlePointerUp)
+        window.removeEventListener("pointercancel", handlePointerUp)
+      }
+
+      window.addEventListener("pointermove", handlePointerMove)
+      window.addEventListener("pointerup", handlePointerUp)
+      window.addEventListener("pointercancel", handlePointerUp)
+    },
+    [getCanvasCoordinates, pointerToSvg, finalizeFreeDraw, onFreeDrawStarted]
+  )
+
+  useEffect(() => {
+    if (arrowType !== "freedraw") {
+      setFreeDrawSourcePlayerId(null)
+      cancelFreeDraw()
+    }
+  }, [arrowType, cancelFreeDraw])
+
+  useEffect(() => {
+    if (mode !== "draw" || arrowType !== "freedraw") return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cancelFreeDraw()
+        setFreeDrawSourcePlayerId(null)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [mode, arrowType, cancelFreeDraw])
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = "move"
@@ -756,7 +878,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       return
     }
     
-    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck") {
+    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "freedraw") {
       const snapToRunEndpoint = (playerId: string, clickX: number, clickY: number) => {
         const normalizedPlayerId = playerId.replace("attack-", "")
         const playerRunArrows = arrows.filter((a) =>
@@ -943,6 +1065,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
     
     if (mode === "draw") {
+      if (arrowType === "freedraw") {
+        onBallSelect(false)
+        onArrowSelect(null)
+        if (freeDrawSourcePlayerId !== player.id) {
+          setFreeDrawSourcePlayerId(player.id)
+          onPlayerSelect(null)
+          return
+        }
+        startFreeDrawSession(player, e)
+        return
+      }
       if (arrowType === "ruck") {
         onToggleRuckPlayer?.(player.id)
         return
@@ -1145,7 +1278,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       window.addEventListener("mousemove", handleMouseMove)
       window.addEventListener("mouseup", handleMouseUp)
     }
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg, freeDrawSourcePlayerId, startFreeDrawSession])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -1557,7 +1690,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (
         currentArrow.arrowType === "pass" ||
         currentArrow.arrowType === "kick" ||
-        currentArrow.arrowType === "ruck"
+        currentArrow.arrowType === "ruck" ||
+        currentArrow.arrowType === "freedraw"
       ) {
         return { x: currentArrow.fromX, y: currentArrow.fromY }
       }
@@ -1568,6 +1702,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           a.arrowType !== "pass" &&
           a.arrowType !== "kick" &&
           a.arrowType !== "ruck" &&
+          a.arrowType !== "freedraw" &&
           (a.playerId === currentArrow.playerId ||
             a.playerId === currentArrow.playerId.replace("attack-", "") ||
             currentArrow.playerId === a.playerId.replace("attack-", ""))
@@ -1579,6 +1714,14 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
       if (predecessors.length > 0) {
         const lastPredecessor = predecessors[predecessors.length - 1]
+        if (
+          lastPredecessor.arrowType === "freedraw" &&
+          lastPredecessor.points &&
+          lastPredecessor.points.length > 0
+        ) {
+          const end = lastPredecessor.points[lastPredecessor.points.length - 1]
+          return { x: end.x, y: end.y }
+        }
         return { x: lastPredecessor.toX, y: lastPredecessor.toY }
       }
 
@@ -1805,6 +1948,29 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           </g>
         )
         break
+      case "freedraw": {
+        const pathD = ensureFreeDrawPathD(arrow)
+        pathElement = (
+          <g key={arrow.id}>
+            <defs>
+              <marker id={markerId} {...arrowMarkerCommon}>
+                <polygon points="0 0, 6 2.5, 0 5" fill={color} />
+              </marker>
+            </defs>
+            <path
+              d={pathD}
+              fill="none"
+              stroke={color}
+              strokeWidth={scaleArrowStroke(0.5)}
+              markerEnd={`url(#${markerId})`}
+              style={{ filter: glowFilter }}
+              className="arrow-path cursor-pointer"
+              onClick={(e) => handleArrowClick(e, arrow)}
+            />
+          </g>
+        )
+        break
+      }
       case "kick": {
         const kickCurve = getKickCurve(arrow.fromX, arrow.fromY, arrow.toX, arrow.toY)
         const { cp1x, cp1y, cp2x, cp2y } = kickCurve
@@ -1901,7 +2067,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       .pop()
     : null
   const selectedPlayerChainColor = selectedPlayerForRunChain ? getPlayerTokenColor(selectedPlayerForRunChain.team) : "#ffffff"
-  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && !!selectedPlayerLastRunArrow
+  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "freedraw" && !!selectedPlayerLastRunArrow
 
   return (
     <div
@@ -1929,7 +2095,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         viewBox={fieldViewBox}
         className={`${
           isZoneFocus ? "h-full w-full" : "max-h-full max-w-full"
-        } ${clickToPlaceActive || showRunChainStartIndicator || isRuckDrawMode ? "cursor-crosshair" : ""}`}
+        } ${clickToPlaceActive || showRunChainStartIndicator || isRuckDrawMode || isFreeDrawMode ? "cursor-crosshair" : ""}`}
         style={{
           filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))",
           ...(isZoneFocus
@@ -2040,6 +2206,16 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
         {/* Movement arrows */}
         {arrows.map(renderArrow)}
+        {freeDrawPreview && freeDrawPreview.length >= 1 && (
+          <path
+            d={pointsToPolylinePath(freeDrawPreview)}
+            fill="none"
+            stroke="#c084fc"
+            strokeWidth={scaleArrowStroke(0.5)}
+            opacity={0.7}
+            className="pointer-events-none"
+          />
+        )}
         {ruckMarkers.map((marker) => (
           <g
             key={marker.id}
@@ -2229,6 +2405,15 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
                 r={tokenRadius + 0.35 * tokenScale}
                 fill="none"
                 stroke="#ec4899"
+                strokeWidth={0.2 * tokenScale}
+                className="animate-pulse pointer-events-none"
+              />
+            )}
+            {isFreeDrawMode && freeDrawSourcePlayerId === player.id && (
+              <circle
+                r={tokenRadius + 0.35 * tokenScale}
+                fill="none"
+                stroke="#a855f7"
                 strokeWidth={0.2 * tokenScale}
                 className="animate-pulse pointer-events-none"
               />
