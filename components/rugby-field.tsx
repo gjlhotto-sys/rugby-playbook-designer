@@ -93,6 +93,8 @@ interface RugbyFieldProps {
   fieldViewBox?: string
   /** Active zone focus — scales on-field player tokens when not full */
   fieldZone?: FieldZone
+  /** Select toolbar active — click token to pick colour without immediate drag */
+  selectionToolActive?: boolean
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -153,6 +155,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   eraseMode = false,
   fieldViewBox = `0 0 ${FIELD_CANVAS_WIDTH} ${FIELD_CANVAS_HEIGHT}`,
   fieldZone = "full",
+  selectionToolActive = false,
 }: RugbyFieldProps, ref) {
   const tokenScale = fieldZone === "full" ? 1 : 0.5
   const isZoneFocus = fieldZone !== "full"
@@ -771,7 +774,15 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       return
     }
     
-    // Deselect arrow if clicking on field in move mode
+    if (mode === "move" && !eraseMode && selectionToolActive && !clickToPlaceActive) {
+      onPlayerSelect(null)
+      onBallSelect(false)
+      if (selectedArrowId) {
+        onArrowSelect(null)
+      }
+      return
+    }
+
     if (mode === "move" && selectedArrowId) {
       onArrowSelect(null)
       return
@@ -814,7 +825,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
 
     onFieldClick(x, y)
-  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect, selectedPlayerId, arrows])
+  }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect, selectedPlayerId, arrows, eraseMode, selectionToolActive, clickToPlaceActive, onPlayerSelect, onBallSelect])
 
   const tryCreatePassToPoint = useCallback((toX: number, toY: number, receiverIdForArrow: string) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return false
@@ -1078,43 +1089,97 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
     if (mode === "move") {
       onArrowSelect(null)
-    }
 
-    onPlayerDragStart(player.id)
+      if (selectionToolActive) {
+        const startClientX = e.clientX
+        const startClientY = e.clientY
+        let didDrag = false
+        const { x, y } = getCanvasCoordinates(e)
 
-    const { x, y } = getCanvasCoordinates(e)
-    draggingRef.current = {
-      type: "player",
-      id: player.id,
-      offsetX: x - player.x,
-      offsetY: y - player.y,
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+          if (
+            !didDrag &&
+            Math.hypot(
+              moveEvent.clientX - startClientX,
+              moveEvent.clientY - startClientY
+            ) > 4
+          ) {
+            didDrag = true
+            onPlayerDragStart(player.id)
+            draggingRef.current = {
+              type: "player",
+              id: player.id,
+              offsetX: x - player.x,
+              offsetY: y - player.y,
+            }
+          }
+
+          if (!didDrag || !draggingRef.current || draggingRef.current.type !== "player") {
+            return
+          }
+
+          const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+          const newX = pt.x - draggingRef.current.offsetX
+          const newY = pt.y - draggingRef.current.offsetY
+
+          onPlayerDrag(
+            draggingRef.current.id,
+            Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
+            Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, newY))
+          )
+        }
+
+        const handleMouseUp = () => {
+          if (!didDrag) {
+            onPlayerSelect(player.id)
+          } else {
+            draggingRef.current = null
+            onPlayerDragEnd()
+          }
+          window.removeEventListener("mousemove", handleMouseMove)
+          window.removeEventListener("mouseup", handleMouseUp)
+        }
+
+        window.addEventListener("mousemove", handleMouseMove)
+        window.addEventListener("mouseup", handleMouseUp)
+        return
+      }
+
+      onPlayerDragStart(player.id)
+
+      const { x, y } = getCanvasCoordinates(e)
+      draggingRef.current = {
+        type: "player",
+        id: player.id,
+        offsetX: x - player.x,
+        offsetY: y - player.y,
+      }
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        if (!draggingRef.current || draggingRef.current.type !== "player" || !svgRef.current) return
+
+        const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
+        const newX = pt.x - draggingRef.current.offsetX
+        const newY = pt.y - draggingRef.current.offsetY
+
+        onPlayerDrag(
+          draggingRef.current.id,
+          Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
+          Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, newY))
+        )
+      }
+
+      const handleMouseUp = () => {
+        draggingRef.current = null
+        onPlayerDragEnd()
+        window.removeEventListener("mousemove", handleMouseMove)
+        window.removeEventListener("mouseup", handleMouseUp)
+      }
+
+      window.addEventListener("mousemove", handleMouseMove)
+      window.addEventListener("mouseup", handleMouseUp)
     }
-    
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!draggingRef.current || draggingRef.current.type !== "player" || !svgRef.current) return
-      
-      const rect = svgRef.current.getBoundingClientRect()
-      const pt = pointerToSvg(moveEvent.clientX, moveEvent.clientY)
-      const newX = pt.x - draggingRef.current.offsetX
-      const newY = pt.y - draggingRef.current.offsetY
-      
-      onPlayerDrag(
-        draggingRef.current.id,
-        Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
-        Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, newY))
-      )
-    }
-    
-    const handleMouseUp = () => {
-      draggingRef.current = null
-      onPlayerDragEnd()
-      window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseup", handleMouseUp)
-    }
-    
-    window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseup", handleMouseUp)
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -1493,6 +1558,29 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const stripeWidth = 5
   const stripeCount = Math.ceil(70 / stripeWidth)
 
+  const scaleArrowStroke = (value: number) => value * tokenScale
+  const scaleArrowDash = (pattern: string) =>
+    pattern
+      .split(",")
+      .map((part) => String(parseFloat(part.trim()) * tokenScale))
+      .join(",")
+  const arrowMarkerCommon = {
+    markerWidth: 6,
+    markerHeight: 5,
+    refX: 5,
+    refY: 2.5,
+    orient: "auto" as const,
+    markerUnits: "strokeWidth" as const,
+  }
+  const kickMarkerCommon = {
+    markerWidth: 8,
+    markerHeight: 6,
+    refX: 7,
+    refY: 3,
+    orient: "auto" as const,
+    markerUnits: "strokeWidth" as const,
+  }
+
   // Render arrow based on type
   const renderArrow = (arrow: Arrow) => {
     const getArrowVisualStart = (currentArrow: Arrow) => {
@@ -1537,7 +1625,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     const dy = arrow.toY - fromY
     const dist = Math.sqrt(dx * dx + dy * dy)
     const isSelected = selectedArrowId === arrow.id
-    const strokeWidth = isSelected ? "0.7" : "0.5"
+    const strokeWidth = scaleArrowStroke(isSelected ? 0.7 : 0.5)
     const glowFilter = isSelected ? "drop-shadow(0 0 2px rgba(255,255,255,0.8))" : undefined
     
     const midX = (fromX + arrow.toX) / 2
@@ -1550,7 +1638,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill={color} />
               </marker>
             </defs>
@@ -1568,13 +1656,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
-                <polygon points="0 0, 6 2.5, 0 5" fill="none" stroke={color} strokeWidth="0.5" />
+              <marker id={markerId} {...arrowMarkerCommon}>
+                <polygon points="0 0, 6 2.5, 0 5" fill="none" stroke={color} strokeWidth={scaleArrowStroke(0.5)} />
               </marker>
             </defs>
             <line 
               x1={fromX} y1={fromY} x2={arrow.toX} y2={arrow.toY}
-              stroke={color} strokeWidth={strokeWidth} strokeDasharray="1,0.5" markerEnd={`url(#${markerId})`}
+              stroke={color} strokeWidth={strokeWidth} strokeDasharray={scaleArrowDash("1,0.5")} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
@@ -1592,7 +1680,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill={color} />
               </marker>
             </defs>
@@ -1616,13 +1704,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill="#EAB308" />
               </marker>
             </defs>
             <path 
               d={`M ${fromX} ${fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
-              fill="none" stroke="#EAB308" strokeWidth={strokeWidth} strokeDasharray="1,0.5" markerEnd={`url(#${markerId})`}
+              fill="none" stroke="#EAB308" strokeWidth={strokeWidth} strokeDasharray={scaleArrowDash("1,0.5")} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
@@ -1638,7 +1726,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill={color} />
               </marker>
             </defs>
@@ -1660,7 +1748,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill={color} />
               </marker>
             </defs>
@@ -1680,7 +1768,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="6" markerHeight="5" refX="5" refY="2.5" orient="auto">
+              <marker id={markerId} {...arrowMarkerCommon}>
                 <polygon points="0 0, 6 2.5, 0 5" fill={color} />
               </marker>
             </defs>
@@ -1706,7 +1794,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           <g key={arrow.id}>
             <line 
               x1={fromX} y1={fromY} x2={endX} y2={endY}
-              stroke={color} strokeWidth={isSelected ? "0.8" : "0.6"}
+              stroke={color} strokeWidth={scaleArrowStroke(isSelected ? 0.8 : 0.6)}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
@@ -1725,13 +1813,13 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         pathElement = (
           <g key={arrow.id}>
             <defs>
-              <marker id={markerId} markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+              <marker id={markerId} {...kickMarkerCommon}>
                 <polygon points="0 0, 8 3, 0 6" fill="#F97316" />
               </marker>
             </defs>
             <path
               d={`M ${arrow.fromX} ${arrow.fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${arrow.toX} ${arrow.toY}`}
-              fill="none" stroke="#F97316" strokeWidth={isSelected ? "0.9" : "0.8"} strokeDasharray="8 4" markerEnd={`url(#${markerId})`}
+              fill="none" stroke="#F97316" strokeWidth={scaleArrowStroke(isSelected ? 0.9 : 0.8)} strokeDasharray={scaleArrowDash("8,4")} markerEnd={`url(#${markerId})`}
               style={{ filter: glowFilter }}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
@@ -1739,8 +1827,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <ellipse
               cx={bezierMid.x}
               cy={bezierMid.y}
-              rx="0.9"
-              ry="0.55"
+              rx={0.9 * tokenScale}
+              ry={0.55 * tokenScale}
               fill="#F97316"
               transform={`rotate(${angle} ${bezierMid.x} ${bezierMid.y})`}
               className="pointer-events-none"
@@ -1760,22 +1848,22 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           {pathElement}
           {/* Start handle */}
           <circle
-            cx={arrow.fromX} cy={arrow.fromY} r="1"
-            fill="white" stroke={color} strokeWidth="0.3"
+            cx={arrow.fromX} cy={arrow.fromY} r={1 * tokenScale}
+            fill="white" stroke={color} strokeWidth={scaleArrowStroke(0.3)}
             className="arrow-handle cursor-move"
             onMouseDown={(e) => handleArrowHandleMouseDown(e, arrow, "start")}
           />
           {/* Mid handle */}
           <circle
-            cx={midX} cy={midY} r="1"
-            fill="white" stroke={color} strokeWidth="0.3"
+            cx={midX} cy={midY} r={1 * tokenScale}
+            fill="white" stroke={color} strokeWidth={scaleArrowStroke(0.3)}
             className="arrow-handle cursor-move"
             onMouseDown={(e) => handleArrowHandleMouseDown(e, arrow, "mid")}
           />
           {/* End handle */}
           <circle
-            cx={arrow.toX} cy={arrow.toY} r="1"
-            fill="white" stroke={color} strokeWidth="0.3"
+            cx={arrow.toX} cy={arrow.toY} r={1 * tokenScale}
+            fill="white" stroke={color} strokeWidth={scaleArrowStroke(0.3)}
             className="arrow-handle cursor-move"
             onMouseDown={(e) => handleArrowHandleMouseDown(e, arrow, "end")}
           />

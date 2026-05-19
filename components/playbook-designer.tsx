@@ -11,6 +11,10 @@ import { PlaybookRightSidebar } from "./playbook-right-sidebar"
 import { PlaybookDesignToolbar, type ToolbarTool } from "./playbook-design-toolbar"
 import { PlaybookDesignStatusBar } from "./playbook-design-status-bar"
 import { PlaybookColorPickerPopover } from "./playbook-color-picker-popover"
+import {
+  PlaybookPlayerColorPopover,
+  clampPlayerColorPopoverPosition,
+} from "./playbook-player-color-popover"
 import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
 import { getViewBoxForZone, type FieldZone } from "@/lib/field-zones"
 import { Menu, X } from "lucide-react"
@@ -939,6 +943,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setLabels([])
     setPhases([])
     setSelectedPlayerId(null)
+    setSelectionPopoverPos(null)
     setSelectedBall(false)
     setSelectedArrowId(null)
     setSelectedPlacementToken(null)
@@ -1307,6 +1312,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const handleToolbarToolChange = useCallback(
     (tool: ToolbarTool) => {
       setToolbarTool(tool)
+      setSelectedPlayerId(null)
       if (tool === "draw") {
         handleModeChange("draw")
       } else {
@@ -1319,6 +1325,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (selectedPlayerId) {
+          setSelectedPlayerId(null)
+          return
+        }
         if (toolbarTool === "erase") {
           setToolbarTool("select")
           handleModeChange("move")
@@ -1328,7 +1338,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [toolbarTool, handleModeChange])
+  }, [toolbarTool, handleModeChange, selectedPlayerId])
 
   const handleAttackCustomColor = useCallback((color: string) => {
     setAttackCustomSwatches((prev) =>
@@ -1454,9 +1464,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
     const updatePosition = () => {
       if (selectedPlayer) {
-        const pos = getFieldCanvasScreenPoint(selectedPlayer.x, selectedPlayer.y)
-        if (pos) {
-          setSelectionPopoverPos({ left: pos.left + 14, top: pos.top - 10 })
+        const anchor = getFieldCanvasScreenPoint(selectedPlayer.x, selectedPlayer.y)
+        if (anchor) {
+          const preferBelow = selectedPlayer.y < 40
+          setSelectionPopoverPos(
+            clampPlayerColorPopoverPosition(anchor, preferBelow)
+          )
         }
         return
       }
@@ -2006,6 +2019,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             zoom={100}
             fieldViewBox={fieldViewBox}
             fieldZone={activeZone}
+            selectionToolActive={toolbarTool === "select"}
             clickToPlaceActive={selectedPlacementToken !== null}
             onFieldClick={handleFieldClick}
             onPlayerDrop={handlePlayerDrop}
@@ -2080,7 +2094,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           mode === "move" &&
           selectionPopoverPos &&
           selectedPlayer ? (
-            <PlaybookColorPickerPopover
+            <PlaybookPlayerColorPopover
               color={
                 selectedPlayer.color ??
                 (selectedPlayer.team === "attack"
@@ -2091,9 +2105,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
                 handlePlayerColorChange(selectedPlayer.id, color)
               }
               onClose={() => setSelectedPlayerId(null)}
+              onRemove={() => handleDeletePlayer(selectedPlayer.id)}
               position={selectionPopoverPos}
-              showDelete
-              onDelete={() => handleDeletePlayer(selectedPlayer.id)}
             />
           ) : null}
           {toolbarTool === "select" &&
