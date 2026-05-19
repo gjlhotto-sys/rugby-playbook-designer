@@ -17,10 +17,13 @@ import {
   Trash2,
   Users,
   ArrowLeftRight,
+  Layers,
 } from 'lucide-react'
 import { ARROW_TYPES, type ArrowType } from '@/lib/types'
 import type { FieldZone } from '@/lib/field-zones'
+import type { LayerToggleKey, LayerVisibility } from '@/lib/layer-visibility'
 import { PlaybookColorPickerPopover } from './playbook-color-picker-popover'
+import { PlaybookLayersPopover } from './playbook-layers-popover'
 
 export type ToolbarTool = 'select' | 'draw' | 'erase'
 
@@ -42,6 +45,10 @@ interface PlaybookDesignToolbarProps {
   onPresent: () => void
   activeZone: FieldZone
   onZoneChange: (zone: FieldZone) => void
+  layerVisibility: LayerVisibility
+  onToggleLayer: (key: LayerToggleKey) => void
+  onResetLayers: () => void
+  onArrowOpacityChange: (opacity: number) => void
 }
 
 export function PlaybookDesignToolbar({
@@ -62,6 +69,10 @@ export function PlaybookDesignToolbar({
   onPresent,
   activeZone,
   onZoneChange,
+  layerVisibility,
+  onToggleLayer,
+  onResetLayers,
+  onArrowOpacityChange,
 }: PlaybookDesignToolbarProps) {
   const zoneButtons: {
     id: FieldZone
@@ -74,13 +85,24 @@ export function PlaybookDesignToolbar({
     { id: 'defence', label: 'Defence Zone', icon: Shield },
   ]
   const [arrowColorOpen, setArrowColorOpen] = useState(false)
+  const [layersOpen, setLayersOpen] = useState(false)
   const arrowColorBtnRef = useRef<HTMLButtonElement>(null)
+  const layersBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (toolbarTool !== 'draw') {
       setArrowColorOpen(false)
     }
   }, [toolbarTool])
+
+  useEffect(() => {
+    if (!layersOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLayersOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [layersOpen])
 
   const arrowColorPopoverPos = arrowColorBtnRef.current
     ? {
@@ -266,6 +288,33 @@ export function PlaybookDesignToolbar({
             >
               Reset
             </button>
+          ) : null}
+        </div>
+
+        <div className="relative">
+          <button
+            ref={layersBtnRef}
+            type="button"
+            onClick={() => setLayersOpen((open) => !open)}
+            className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+              layersOpen
+                ? 'border-[#555] bg-[#252525] text-[#ccc]'
+                : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-[#ccc]'
+            }`}
+            style={{ borderWidth: '0.5px' }}
+          >
+            <Layers className="h-3.5 w-3.5" strokeWidth={2} />
+            Layers
+          </button>
+          {layersOpen ? (
+            <PlaybookLayersPopover
+              layerVisibility={layerVisibility}
+              onToggleLayer={onToggleLayer}
+              onResetLayers={onResetLayers}
+              onArrowOpacityChange={onArrowOpacityChange}
+              onClose={() => setLayersOpen(false)}
+              anchorRef={layersBtnRef}
+            />
           ) : null}
         </div>
 

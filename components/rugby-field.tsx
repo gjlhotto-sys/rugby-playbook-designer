@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect } from "react"
+import { forwardRef, useImperativeHandle, useRef, useCallback, useState, useEffect, useMemo } from "react"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel } from "@/lib/types"
 import { ARROW_TYPES } from "@/lib/types"
 import {
@@ -23,6 +23,11 @@ import {
   type PathPoint,
 } from "@/lib/freedraw-path"
 import type { RuckMarker } from "@/lib/types"
+import {
+  DEFAULT_LAYER_VISIBILITY,
+  filterVisibleArrows,
+  type LayerVisibility,
+} from "@/lib/layer-visibility"
 
 export interface RugbyFieldHandle {
   play: () => void
@@ -102,6 +107,8 @@ interface RugbyFieldProps {
   /** When true, hides the in-field Play/Pause/Reset toolbar (e.g. shared play view with external controls). */
   hideControls?: boolean
   onAnimationStateChange?: (playing: boolean) => void
+  onAnimationFinished?: () => void
+  layerVisibility?: LayerVisibility
   eraseMode?: boolean
   /** SVG viewBox — defaults to full field; zone focus narrows visible area */
   fieldViewBox?: string
@@ -179,6 +186,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   animationSpeed = 1,
   hideControls = false,
   onAnimationStateChange,
+  onAnimationFinished,
+  layerVisibility = DEFAULT_LAYER_VISIBILITY,
   eraseMode = false,
   fieldViewBox = `0 0 ${FIELD_CANVAS_WIDTH} ${FIELD_CANVAS_HEIGHT}`,
   fieldZone = "full",
@@ -621,6 +630,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     if (groupIndex >= groups.length) {
       isAnimatingRef.current = false
       onAnimationStateChange?.(false)
+      onAnimationFinished?.()
       console.log("Animation complete")
       return
     }
@@ -674,7 +684,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         }
       })
     )
-  }, [ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout, buildGroupMotion, prepareNextGroup, onAnimationStateChange])
+  }, [ball, onBallDrag, animationSpeed, animateGroupTick, clearGroupTimeout, buildGroupMotion, prepareNextGroup, onAnimationStateChange, onAnimationFinished])
 
   const handlePlay = useCallback(() => {
     if (animationFrameRef.current) {
@@ -1798,6 +1808,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     const isSelected = selectedArrowId === arrow.id
     const strokeWidth = scaleArrowStroke(isSelected ? 0.7 : 0.5)
     const glowFilter = isSelected ? "drop-shadow(0 0 2px rgba(255,255,255,0.8))" : undefined
+    const arrowOpacity = layerVisibility.arrowOpacity
+    const arrowStyle = { filter: glowFilter, opacity: arrowOpacity }
     
     const midX = (fromX + arrow.toX) / 2
     const midY = (fromY + arrow.toY) / 2
@@ -1816,7 +1828,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <line 
               x1={fromX} y1={fromY} x2={arrow.toX} y2={arrow.toY}
               stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`} 
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1834,7 +1846,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <line 
               x1={fromX} y1={fromY} x2={arrow.toX} y2={arrow.toY}
               stroke={color} strokeWidth={strokeWidth} strokeDasharray={scaleArrowDash("1,0.5")} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1858,7 +1870,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path 
               d={`M ${fromX} ${fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1882,7 +1894,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path 
               d={`M ${fromX} ${fromY} Q ${ctrlX} ${ctrlY} ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke="#EAB308" strokeWidth={strokeWidth} strokeDasharray={scaleArrowDash("1,0.5")} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1904,7 +1916,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path 
               d={`M ${fromX} ${fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1926,7 +1938,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path 
               d={`M ${fromX} ${fromY} L ${zMidX + offsetX} ${zMidY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1946,7 +1958,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path 
               d={`M ${fromX} ${fromY} A ${loopRadius} ${loopRadius} 0 1 0 ${midX} ${midY} L ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke={color} strokeWidth={strokeWidth} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1966,7 +1978,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <line 
               x1={fromX} y1={fromY} x2={endX} y2={endY}
               stroke={color} strokeWidth={scaleArrowStroke(isSelected ? 0.8 : 0.6)}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -1992,7 +2004,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
               stroke={color}
               strokeWidth={scaleArrowStroke(0.5)}
               markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -2013,10 +2025,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
               x2={arrow.toX}
               y2={arrow.toY}
               stroke={color}
-              strokeWidth={scaleArrowStroke(1)}
+              strokeWidth={strokeWidth}
               strokeDasharray={scaleArrowDash("6,3")}
               markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -2038,7 +2050,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
               stroke={color}
               strokeWidth={scaleArrowStroke(0.5)}
               markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -2061,7 +2073,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             <path
               d={`M ${arrow.fromX} ${arrow.fromY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${arrow.toX} ${arrow.toY}`}
               fill="none" stroke="#F97316" strokeWidth={scaleArrowStroke(isSelected ? 0.9 : 0.8)} strokeDasharray={scaleArrowDash("8,4")} markerEnd={`url(#${markerId})`}
-              style={{ filter: glowFilter }}
+              style={arrowStyle}
               className="arrow-path cursor-pointer"
               onClick={(e) => handleArrowClick(e, arrow)}
             />
@@ -2143,6 +2155,19 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     : null
   const selectedPlayerChainColor = selectedPlayerForRunChain ? getPlayerTokenColor(selectedPlayerForRunChain.team) : "#ffffff"
   const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "reposition" && arrowType !== "freedraw" && !!selectedPlayerLastRunArrow
+
+  const visibleArrows = useMemo(
+    () => filterVisibleArrows(arrows, layerVisibility),
+    [arrows, layerVisibility]
+  )
+
+  const visiblePlayers = useMemo(
+    () =>
+      layerVisibility.defencePlayers
+        ? players
+        : players.filter((p) => p.team !== "defense"),
+    [players, layerVisibility.defencePlayers]
+  )
 
   return (
     <div
@@ -2280,7 +2305,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         <text x={BUFFER + 35} y={BUFFER + 106} fontSize="2" fill="white" opacity="0.4" textAnchor="middle">IN-GOAL</text>
 
         {/* Movement arrows */}
-        {arrows.map(renderArrow)}
+        {visibleArrows.map(renderArrow)}
         {freeDrawPreview && freeDrawPreview.length >= 1 && (
           <path
             d={pointsToPolylinePath(freeDrawPreview)}
@@ -2291,7 +2316,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             className="pointer-events-none"
           />
         )}
-        {ruckMarkers.map((marker) => (
+        {layerVisibility.ruckArrows &&
+          ruckMarkers.map((marker) => (
           <g
             key={marker.id}
             className="ruck-marker cursor-pointer"
@@ -2456,7 +2482,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         })()}
 
         {/* Player tokens - 16px = ~1.6 units at this scale */}
-        {players.map((player) => {
+        {visiblePlayers.map((player) => {
           const renderPos = animatedPositionsRef.current[player.id]
             ?? animatedPositions[player.id]
             ?? { x: player.x, y: player.y }

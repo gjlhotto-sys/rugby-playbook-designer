@@ -31,6 +31,12 @@ import {
   resolvePlayersToArrowEndpoints,
 } from "@/lib/phase-snapshots"
 import { resolvePlayerChainStart } from "@/lib/freedraw-path"
+import {
+  ALL_LAYERS_VISIBLE,
+  DEFAULT_LAYER_VISIBILITY,
+  type LayerToggleKey,
+  type LayerVisibility,
+} from "@/lib/layer-visibility"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import {
@@ -83,6 +89,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   >([])
   const [repositionHintDismissed, setRepositionHintDismissed] = useState(false)
   const [freeDrawHintDismissed, setFreeDrawHintDismissed] = useState(false)
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>(
+    DEFAULT_LAYER_VISIBILITY
+  )
+  const preAnimationVisibilityRef = useRef<LayerVisibility | null>(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedBall, setSelectedBall] = useState(false)
   const [selectedArrowId, setSelectedArrowId] = useState<string | null>(null)
@@ -376,6 +386,31 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setRepositionAssignmentMode(false)
     setRepositionAssignmentIndex(0)
     setRepositionTargets([])
+  }, [])
+
+  const toggleLayer = useCallback((key: LayerToggleKey) => {
+    setLayerVisibility((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }))
+  }, [])
+
+  const resetLayers = useCallback(() => {
+    setLayerVisibility(DEFAULT_LAYER_VISIBILITY)
+  }, [])
+
+  const expandLayersForAnimation = useCallback(() => {
+    setLayerVisibility((prev) => {
+      preAnimationVisibilityRef.current = prev
+      return ALL_LAYERS_VISIBLE
+    })
+  }, [])
+
+  const restoreLayersAfterAnimation = useCallback(() => {
+    if (preAnimationVisibilityRef.current) {
+      setLayerVisibility(preAnimationVisibilityRef.current)
+      preAnimationVisibilityRef.current = null
+    }
   }, [])
 
   const getFieldCoords = useCallback((xPercent: number, yPercent: number) => ({
@@ -1189,6 +1224,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setHasCompletedAnimation(false)
     setStartPositions(null)
     setUndoStack([])
+    setLayerVisibility(DEFAULT_LAYER_VISIBILITY)
+    preAnimationVisibilityRef.current = null
     fieldRef.current?.reset()
   }, [clearRepositionState])
 
@@ -1473,6 +1510,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setHasUnsavedChanges(false)
       setShowPhaseCopyBanner(false)
       setActiveZone("full")
+      setLayerVisibility(DEFAULT_LAYER_VISIBILITY)
+      preAnimationVisibilityRef.current = null
     },
     [applyCanvasSnapshot]
   )
@@ -1502,6 +1541,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setHasUnsavedChanges(false)
     setShowPhaseCopyBanner(false)
     setActiveZone("full")
+    setLayerVisibility(DEFAULT_LAYER_VISIBILITY)
+    preAnimationVisibilityRef.current = null
     fieldRef.current?.reset()
   }, [])
 
@@ -1663,15 +1704,17 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setIsAnimating(false)
       return
     }
+    expandLayersForAnimation()
     fieldRef.current?.play()
     setIsAnimating(true)
-  }, [arrows.length, isAnimating])
+  }, [arrows.length, isAnimating, expandLayersForAnimation])
 
   const handlePlayAnimation = useCallback(() => {
     if (arrows.length === 0) return
+    expandLayersForAnimation()
     fieldRef.current?.play()
     setIsAnimating(true)
-  }, [arrows.length])
+  }, [arrows.length, expandLayersForAnimation])
 
   const handlePauseAnimation = useCallback(() => {
     fieldRef.current?.pause()
@@ -1701,13 +1744,19 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setIsAnimating(false)
     setIsPaused(false)
     setHasCompletedAnimation(false)
-  }, [startPositions, ball])
+    restoreLayersAfterAnimation()
+  }, [startPositions, ball, restoreLayersAfterAnimation])
+
+  const handleAnimationFinished = useCallback(() => {
+    restoreLayersAfterAnimation()
+  }, [restoreLayersAfterAnimation])
 
   const handleAnimationComplete = useCallback(() => {
     setIsAnimating(false)
     setIsPaused(false)
     setHasCompletedAnimation(true)
-  }, [])
+    restoreLayersAfterAnimation()
+  }, [restoreLayersAfterAnimation])
 
   const selectedPlayer = selectedPlayerId
     ? fieldPlayers.find((p) => p.id === selectedPlayerId) ?? null
@@ -2230,6 +2279,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               setPanX(0)
               setPanY(0)
             }}
+            layerVisibility={layerVisibility}
+            onToggleLayer={toggleLayer}
+            onResetLayers={resetLayers}
+            onArrowOpacityChange={(opacity) =>
+              setLayerVisibility((prev) => ({ ...prev, arrowOpacity: opacity }))
+            }
           />
         )}
 
@@ -2395,6 +2450,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             onTextLabelCreate={handleTextLabelCreate}
             animationSpeed={animationSpeed}
             onAnimationStateChange={handleFieldAnimationStateChange}
+            onAnimationFinished={handleAnimationFinished}
+            layerVisibility={layerVisibility}
             eraseMode={toolbarTool === "erase"}
             />
           </div>
