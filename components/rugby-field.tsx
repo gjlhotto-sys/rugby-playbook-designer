@@ -12,7 +12,9 @@ import {
 } from "@/lib/field-zones"
 import { buildAnimationGroupsFromArrows } from "@/lib/ruck-animation"
 import {
+  alignFreeDrawPointsToStart,
   buildFreeDrawArrowFromRaw,
+  computeAnimationDurationMs,
   dist as pathDist,
   ensureFreeDrawPathD,
   interpolateAlongPoints,
@@ -495,10 +497,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
       if (arrow.arrowType === "freedraw" && arrow.points && arrow.points.length >= 2) {
         if (player) {
-          const pts = arrow.points
-          freedrawPathsRef.current[player.id] = pts
           const playerStart = getPlayerCurrentPos(player.id)
           if (playerStart) {
+            const pts = alignFreeDrawPointsToStart(arrow.points, playerStart)
+            freedrawPathsRef.current[player.id] = pts
             starts[player.id] = playerStart
             targets[player.id] = pts[pts.length - 1]
           }
@@ -521,6 +523,12 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const prepareNextGroup = useCallback((group: SequencedArrow[], groupIndex: number) => {
     const { starts, targets, hasPassInGroup, kickCurve } = buildGroupMotion(group)
     kickCurveRef.current = kickCurve
+    animationDurationRef.current = computeAnimationDurationMs(
+      group,
+      starts,
+      targets,
+      animationSpeed
+    )
     const groupStartTime = performance.now()
     overlappedGroupIndexRef.current = groupIndex
 
@@ -583,7 +591,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     }
 
     overlapAnimationFrameRef.current = requestAnimationFrame(parallelTick)
-  }, [buildGroupMotion, ball, onBallDrag, getBezierPoint])
+  }, [buildGroupMotion, ball, onBallDrag, getBezierPoint, animationSpeed])
 
   const playNextGroup = useCallback(() => {
     const groups = animationGroupsRef.current
@@ -603,7 +611,12 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     startPositionsRef.current = { ...startPositionsRef.current, ...groupStarts }
     targetPositionsRef.current = groupTargets
     animationStartTimeRef.current = performance.now()
-    animationDurationRef.current = 2000 / (animationSpeed ?? 1)
+    animationDurationRef.current = computeAnimationDurationMs(
+      currentGroup,
+      groupStarts,
+      groupTargets,
+      animationSpeed
+    )
 
     animationFrameRef.current = requestAnimationFrame((ts) =>
       animateGroupTick(ts, groupStarts, groupTargets, animationStartTimeRef.current, () => {
@@ -762,11 +775,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     const player = players.find((p) => p.id === session.playerId)
     if (!player) return
 
-    const arrow = buildFreeDrawArrowFromRaw(session.rawPoints, player, arrowColor)
+    const arrow = buildFreeDrawArrowFromRaw(session.rawPoints, player, arrows, arrowColor)
     if (arrow) {
       onFreeDrawArrowAdd?.(arrow)
     }
-  }, [players, arrowColor, onFreeDrawArrowAdd])
+  }, [players, arrows, arrowColor, onFreeDrawArrowAdd])
 
   const startFreeDrawSession = useCallback(
     (player: FieldPlayer, e: React.MouseEvent) => {
@@ -1690,10 +1703,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (
         currentArrow.arrowType === "pass" ||
         currentArrow.arrowType === "kick" ||
-        currentArrow.arrowType === "ruck" ||
-        currentArrow.arrowType === "freedraw"
+        currentArrow.arrowType === "ruck"
       ) {
         return { x: currentArrow.fromX, y: currentArrow.fromY }
+      }
+
+      if (
+        currentArrow.arrowType === "freedraw" &&
+        currentArrow.points &&
+        currentArrow.points.length > 0
+      ) {
+        return { x: currentArrow.points[0].x, y: currentArrow.points[0].y }
       }
 
       const playerArrows = arrows
@@ -1702,7 +1722,6 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           a.arrowType !== "pass" &&
           a.arrowType !== "kick" &&
           a.arrowType !== "ruck" &&
-          a.arrowType !== "freedraw" &&
           (a.playerId === currentArrow.playerId ||
             a.playerId === currentArrow.playerId.replace("attack-", "") ||
             currentArrow.playerId === a.playerId.replace("attack-", ""))

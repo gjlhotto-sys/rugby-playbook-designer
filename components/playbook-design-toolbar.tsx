@@ -90,10 +90,10 @@ export function PlaybookDesignToolbar({
 
   return (
     <div
-      className="flex shrink-0 items-center gap-3 border-b border-[#2a2a2a] bg-[#161616] px-3.5 py-2"
+      className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[#2a2a2a] bg-[#161616] px-3.5 py-2"
       style={{ borderBottomWidth: '0.5px' }}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <div
           className="flex overflow-hidden rounded-lg border border-[#2a2a2a] bg-[#1a1a1a] p-0.5"
           style={{ borderWidth: '0.5px' }}
@@ -168,7 +168,7 @@ export function PlaybookDesignToolbar({
 
         {toolbarTool === 'draw' ? (
           <>
-            <div className="flex max-w-[min(52vw,520px)] items-center gap-1 overflow-x-auto">
+            <div className="flex flex-wrap gap-1">
               {ARROW_TYPES.map((at) => {
                 const isRuck = at.type === 'ruck'
                 const isFreeDraw = at.type === 'freedraw'

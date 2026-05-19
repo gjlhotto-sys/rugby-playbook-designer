@@ -1,4 +1,7 @@
-import type { Arrow } from './types'
+import type { Arrow, FieldPlayer } from './types'
+
+/** Base step duration for a straight run — matches rugby-field animation (2000ms at 1x speed). */
+export const BASE_ANIMATION_DURATION_MS = 2000
 
 export interface PathPoint {
   x: number
@@ -132,15 +135,104 @@ export function ensureFreeDrawPathD(arrow: Arrow): string {
   return `M ${arrow.fromX} ${arrow.fromY} L ${arrow.toX} ${arrow.toY}`
 }
 
+function arrowBelongsToPlayer(arrow: Arrow, player: FieldPlayer): boolean {
+  if (arrow.arrowType === 'pass' || arrow.arrowType === 'kick' || arrow.arrowType === 'ruck') {
+    return false
+  }
+  const keys = new Set([
+    player.id,
+    `attack-${player.number}`,
+    `defense-${player.number}`,
+    `defence-${player.number}`,
+    `${player.team}-${player.number}`,
+  ])
+  if (keys.has(arrow.playerId)) return true
+  const norm = arrow.playerId.replace(/^attack-/, '').replace(/^defense-/, '').replace(/^defence-/, '')
+  return norm === String(player.number) || arrow.playerId === `${player.team}-${player.number}`
+}
+
+type SequencedArrow = Arrow & { timestamp?: number }
+
+/** End position after prior movement arrows for this player (same chain logic as Run/Curve). */
+export function resolvePlayerChainStart(
+  player: FieldPlayer,
+  arrows: Arrow[]
+): PathPoint {
+  const movementArrows = arrows
+    .filter((a) => arrowBelongsToPlayer(a, player))
+    .sort((a, b) => {
+      const aOrder = (a as SequencedArrow).timestamp ?? arrows.indexOf(a)
+      const bOrder = (b as SequencedArrow).timestamp ?? arrows.indexOf(b)
+      return aOrder - bOrder
+    })
+
+  if (movementArrows.length === 0) {
+    return { x: player.x, y: player.y }
+  }
+
+  const last = movementArrows[movementArrows.length - 1]
+  if (last.arrowType === 'freedraw' && last.points && last.points.length > 0) {
+    const end = last.points[last.points.length - 1]
+    return { x: end.x, y: end.y }
+  }
+  return { x: last.toX, y: last.toY }
+}
+
+export function offsetPointsToAnchor(
+  points: PathPoint[],
+  anchor: PathPoint
+): PathPoint[] {
+  if (points.length === 0) return points
+  const dx = anchor.x - points[0].x
+  const dy = anchor.y - points[0].y
+  if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return points
+  return points.map((p) => ({ x: p.x + dx, y: p.y + dy }))
+}
+
+/** Duration for one animation group — scales freedraw by path length vs straight-line distance. */
+export function computeAnimationDurationMs(
+  group: Arrow[],
+  starts: Record<string, { x: number; y: number }>,
+  targets: Record<string, { x: number; y: number }>,
+  animationSpeed = 1
+): number {
+  const baseMs = BASE_ANIMATION_DURATION_MS / animationSpeed
+  const freedraw = group.find(
+    (a) => a.arrowType === 'freedraw' && a.points && a.points.length >= 2
+  )
+  if (!freedraw) return baseMs
+
+  const start = starts[freedraw.playerId]
+  const target = targets[freedraw.playerId]
+  if (!start || !target) return baseMs
+
+  const pathLen = getTotalLength(freedraw.points!)
+  const straightDist = dist(start, target)
+  if (straightDist < 0.001) return baseMs
+
+  return (pathLen / straightDist) * baseMs
+}
+
+export function alignFreeDrawPointsToStart(
+  points: PathPoint[],
+  start: PathPoint
+): PathPoint[] {
+  return offsetPointsToAnchor(points, start)
+}
+
 export function buildFreeDrawArrowFromRaw(
   rawPoints: PathPoint[],
-  player: { id: string; team: 'attack' | 'defense'; x: number; y: number },
+  player: FieldPlayer,
+  arrows: Arrow[],
   color: string
 ): Arrow | null {
   if (rawPoints.length < 2) return null
   if (getTotalLength(rawPoints) < 10) return null
 
-  const points = rdpSimplify(rawPoints, 3)
+  const chainStart = resolvePlayerChainStart(player, arrows)
+  const anchoredRaw = offsetPointsToAnchor(rawPoints, chainStart)
+
+  const points = rdpSimplify(anchoredRaw, 3)
   if (points.length < 2) return null
 
   const pathD = pointsToSmoothPath(points)
