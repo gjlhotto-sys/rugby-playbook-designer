@@ -19,6 +19,7 @@ import {
   ensureFreeDrawPathD,
   interpolateAlongPoints,
   pointsToPolylinePath,
+  resolvePlayerChainStart,
   type PathPoint,
 } from "@/lib/freedraw-path"
 import type { RuckMarker } from "@/lib/types"
@@ -111,6 +112,12 @@ interface RugbyFieldProps {
   ruckSelectedPlayerIds?: string[]
   onToggleRuckPlayer?: (playerId: string) => void
   onEraseRuck?: (ruckId: string) => void
+  repositionSelectedPlayerIds?: string[]
+  repositionAssignmentMode?: boolean
+  repositionAssignmentIndex?: number
+  repositionTargets?: Array<{ playerId: string; toX: number; toY: number }>
+  onToggleRepositionPlayer?: (playerId: string) => void
+  onEraseReposition?: (repositionId: string) => void
   arrowColor?: string
   onFreeDrawArrowAdd?: (arrow: Arrow) => void
   onFreeDrawStarted?: () => void
@@ -179,6 +186,12 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   ruckSelectedPlayerIds = [],
   onToggleRuckPlayer,
   onEraseRuck,
+  repositionSelectedPlayerIds = [],
+  repositionAssignmentMode = false,
+  repositionAssignmentIndex = 0,
+  repositionTargets = [],
+  onToggleRepositionPlayer,
+  onEraseReposition,
   arrowColor = "#2563eb",
   onFreeDrawArrowAdd,
   onFreeDrawStarted,
@@ -199,7 +212,15 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const ruckMarkerInnerR = 0.75 * tokenScale
   const ruckMarkerOuterR = 1.15 * tokenScale
   const ruckMarkerLabelSize = 0.35 * tokenScale
+  const repositionTargetR = 0.5 * tokenScale
+  const repositionTargetLabelSize = 0.35 * tokenScale
   const isRuckDrawMode = mode === "draw" && arrowType === "ruck" && !eraseMode
+  const isRepositionDrawMode =
+    mode === "draw" && arrowType === "reposition" && !eraseMode
+  const currentRepositionPlayerId =
+    repositionAssignmentMode && repositionSelectedPlayerIds.length > 0
+      ? repositionSelectedPlayerIds[repositionAssignmentIndex]
+      : null
   const isFreeDrawMode = mode === "draw" && arrowType === "freedraw" && !eraseMode
   const [freeDrawSourcePlayerId, setFreeDrawSourcePlayerId] = useState<string | null>(null)
   const [freeDrawPreview, setFreeDrawPreview] = useState<PathPoint[] | null>(null)
@@ -891,7 +912,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       return
     }
     
-    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "freedraw") {
+    if (mode === "draw" && selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "reposition" && arrowType !== "freedraw") {
       const snapToRunEndpoint = (playerId: string, clickX: number, clickY: number) => {
         const normalizedPlayerId = playerId.replace("attack-", "")
         const playerRunArrows = arrows.filter((a) =>
@@ -1093,6 +1114,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         onToggleRuckPlayer?.(player.id)
         return
       }
+      if (arrowType === "reposition" && !repositionAssignmentMode) {
+        onToggleRepositionPlayer?.(player.id)
+        return
+      }
       if (arrowType === "pass") {
         onBallSelect(false)
         onArrowSelect(null)
@@ -1291,7 +1316,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       window.addEventListener("mousemove", handleMouseMove)
       window.addEventListener("mouseup", handleMouseUp)
     }
-  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg, freeDrawSourcePlayerId, startFreeDrawSession])
+  }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg, freeDrawSourcePlayerId, startFreeDrawSession, onToggleRuckPlayer, onToggleRepositionPlayer, repositionAssignmentMode])
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -1560,6 +1585,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         onEraseRuck(arrow.ruckId)
         return
       }
+      if (arrow.arrowType === "reposition" && arrow.repositionId && onEraseReposition) {
+        onEraseReposition(arrow.repositionId)
+        return
+      }
       onArrowDelete(arrow.id)
       return
     }
@@ -1568,7 +1597,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     onPlayerSelect(null)
     onBallSelect(false)
     onArrowSelect(selectedArrowId === arrow.id ? null : arrow.id)
-  }, [eraseMode, mode, selectedArrowId, onArrowSelect, onArrowDelete, onPlayerSelect, onBallSelect, onEraseRuck])
+  }, [eraseMode, mode, selectedArrowId, onArrowSelect, onArrowDelete, onPlayerSelect, onBallSelect, onEraseRuck, onEraseReposition])
 
   // Arrow handle dragging
   const handleArrowHandleMouseDown = useCallback((e: React.MouseEvent, arrow: Arrow, handleType: "start" | "mid" | "end") => {
@@ -1703,7 +1732,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       if (
         currentArrow.arrowType === "pass" ||
         currentArrow.arrowType === "kick" ||
-        currentArrow.arrowType === "ruck"
+        currentArrow.arrowType === "ruck" ||
+        currentArrow.arrowType === "reposition"
       ) {
         return { x: currentArrow.fromX, y: currentArrow.fromY }
       }
@@ -1758,7 +1788,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           ? "#F97316"
           : arrow.arrowType === "ruck"
             ? arrow.color ?? "#ec4899"
-            : getArrowColor(arrow.team))
+            : arrow.arrowType === "reposition"
+              ? arrow.color ?? "#f59e0b"
+              : getArrowColor(arrow.team))
     const markerId = `arrowhead-${arrow.id}`
     const dx = arrow.toX - fromX
     const dy = arrow.toY - fromY
@@ -1967,6 +1999,30 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           </g>
         )
         break
+      case "reposition":
+        pathElement = (
+          <g key={arrow.id}>
+            <defs>
+              <marker id={markerId} {...arrowMarkerCommon}>
+                <polygon points="0 0, 6 2.5, 0 5" fill={color} />
+              </marker>
+            </defs>
+            <line
+              x1={fromX}
+              y1={fromY}
+              x2={arrow.toX}
+              y2={arrow.toY}
+              stroke={color}
+              strokeWidth={scaleArrowStroke(1)}
+              strokeDasharray={scaleArrowDash("6,3")}
+              markerEnd={`url(#${markerId})`}
+              style={{ filter: glowFilter }}
+              className="arrow-path cursor-pointer"
+              onClick={(e) => handleArrowClick(e, arrow)}
+            />
+          </g>
+        )
+        break
       case "freedraw": {
         const pathD = ensureFreeDrawPathD(arrow)
         pathElement = (
@@ -2086,7 +2142,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
       .pop()
     : null
   const selectedPlayerChainColor = selectedPlayerForRunChain ? getPlayerTokenColor(selectedPlayerForRunChain.team) : "#ffffff"
-  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "freedraw" && !!selectedPlayerLastRunArrow
+  const showRunChainStartIndicator = mode === "draw" && !!selectedPlayerId && arrowType !== "pass" && arrowType !== "kick" && arrowType !== "ruck" && arrowType !== "reposition" && arrowType !== "freedraw" && !!selectedPlayerLastRunArrow
 
   return (
     <div
@@ -2271,6 +2327,44 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             </text>
           </g>
         ))}
+        {isRepositionDrawMode &&
+          repositionAssignmentMode &&
+          repositionTargets.map((target) => {
+            const player = players.find((p) => p.id === target.playerId)
+            if (!player) return null
+            const from = resolvePlayerChainStart(player, arrows)
+            return (
+              <g key={target.playerId} className="pointer-events-none">
+                <line
+                  x1={from.x}
+                  y1={from.y}
+                  x2={target.toX}
+                  y2={target.toY}
+                  stroke="#f59e0b"
+                  strokeWidth={scaleArrowStroke(0.25)}
+                  strokeDasharray={scaleArrowDash("4,3")}
+                  opacity={0.6}
+                />
+                <g transform={`translate(${target.toX}, ${target.toY})`}>
+                  <circle
+                    r={repositionTargetR}
+                    fill="#f59e0b"
+                    fillOpacity={0.8}
+                  />
+                  <text
+                    y={0.05 * tokenScale}
+                    fontSize={repositionTargetLabelSize}
+                    fill="white"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    className="pointer-events-none font-bold select-none"
+                  >
+                    {player.number}
+                  </text>
+                </g>
+              </g>
+            )
+          })}
         {showRunChainStartIndicator && selectedPlayerLastRunArrow && (
           <g className="pointer-events-none">
             <circle
@@ -2425,6 +2519,22 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
                 fill="none"
                 stroke="#ec4899"
                 strokeWidth={0.2 * tokenScale}
+                className="animate-pulse pointer-events-none"
+              />
+            )}
+            {isRepositionDrawMode &&
+              repositionSelectedPlayerIds.includes(player.id) && (
+              <circle
+                r={tokenRadius + 0.35 * tokenScale}
+                fill="none"
+                stroke={
+                  player.id === currentRepositionPlayerId ? "#fcd34d" : "#f59e0b"
+                }
+                strokeWidth={
+                  player.id === currentRepositionPlayerId
+                    ? 0.35 * tokenScale
+                    : 0.2 * tokenScale
+                }
                 className="animate-pulse pointer-events-none"
               />
             )}

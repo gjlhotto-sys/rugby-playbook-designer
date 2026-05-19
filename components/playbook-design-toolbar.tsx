@@ -16,6 +16,7 @@ import {
   Shield,
   Trash2,
   Users,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { ARROW_TYPES, type ArrowType } from '@/lib/types'
 import type { FieldZone } from '@/lib/field-zones'
@@ -171,6 +172,7 @@ export function PlaybookDesignToolbar({
             <div className="flex flex-wrap gap-1">
               {ARROW_TYPES.map((at) => {
                 const isRuck = at.type === 'ruck'
+                const isReposition = at.type === 'reposition'
                 const isFreeDraw = at.type === 'freedraw'
                 const isActive = arrowType === at.type
                 return (
@@ -182,9 +184,11 @@ export function PlaybookDesignToolbar({
                       isActive
                         ? isRuck
                           ? 'border-[#ec4899] bg-[#2a0a1a] text-[#ec4899]'
-                          : isFreeDraw
-                            ? 'border-[#a855f7] bg-[#1a1a2e] text-[#c084fc]'
-                            : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
+                          : isReposition
+                            ? 'border-[#f59e0b] bg-[#1a1a2a] text-[#fcd34d]'
+                            : isFreeDraw
+                              ? 'border-[#a855f7] bg-[#1a1a2e] text-[#c084fc]'
+                              : 'border-[#2563eb] bg-[#0f1e3a] text-[#93c5fd]'
                         : 'border-[#2a2a2a] bg-[#1f1f1f] text-[#777] hover:text-[#aaa]'
                     }`}
                     style={{ borderWidth: '0.5px' }}
@@ -192,6 +196,8 @@ export function PlaybookDesignToolbar({
                   >
                     {isRuck ? (
                       <Users className="h-3 w-3 shrink-0" strokeWidth={2} />
+                    ) : isReposition ? (
+                      <ArrowLeftRight className="h-3 w-3 shrink-0" strokeWidth={2} />
                     ) : isFreeDraw ? (
                       <PenLine className="h-3 w-3 shrink-0" strokeWidth={2} />
                     ) : null}

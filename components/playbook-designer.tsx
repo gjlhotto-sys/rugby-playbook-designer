@@ -30,6 +30,7 @@ import {
   clonePlayersForNextPhase,
   resolvePlayersToArrowEndpoints,
 } from "@/lib/phase-snapshots"
+import { resolvePlayerChainStart } from "@/lib/freedraw-path"
 import { generatePlayNotes } from "@/lib/generate-notes"
 import { exportPlayAsVideo } from "@/lib/export-animation"
 import {
@@ -74,6 +75,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [ruckMarkers, setRuckMarkers] = useState<RuckMarker[]>([])
   const [ruckSelectedPlayerIds, setRuckSelectedPlayerIds] = useState<string[]>([])
   const [ruckHintDismissed, setRuckHintDismissed] = useState(false)
+  const [repositionSelectedPlayerIds, setRepositionSelectedPlayerIds] = useState<string[]>([])
+  const [repositionAssignmentMode, setRepositionAssignmentMode] = useState(false)
+  const [repositionAssignmentIndex, setRepositionAssignmentIndex] = useState(0)
+  const [repositionTargets, setRepositionTargets] = useState<
+    Array<{ playerId: string; toX: number; toY: number }>
+  >([])
+  const [repositionHintDismissed, setRepositionHintDismissed] = useState(false)
   const [freeDrawHintDismissed, setFreeDrawHintDismissed] = useState(false)
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null)
   const [selectedBall, setSelectedBall] = useState(false)
@@ -350,11 +358,24 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           setRuckMarkers((prev) => [...prev, lastAction.marker!])
         }
         break
+      case "add_reposition":
+        setArrows((prev) => prev.filter((a) => a.repositionId !== lastAction.repositionId))
+        break
+      case "delete_reposition":
+        setArrows((prev) => [...prev, ...lastAction.arrows])
+        break
     }
   }, [undoStack])
 
   const clearRuckSelection = useCallback(() => {
     setRuckSelectedPlayerIds([])
+  }, [])
+
+  const clearRepositionState = useCallback(() => {
+    setRepositionSelectedPlayerIds([])
+    setRepositionAssignmentMode(false)
+    setRepositionAssignmentIndex(0)
+    setRepositionTargets([])
   }, [])
 
   const getFieldCoords = useCallback((xPercent: number, yPercent: number) => ({
@@ -390,7 +411,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setSelectedArrowId(null)
     setPasserSelected(null)
     clearRuckSelection()
-  }, [clearRuckSelection])
+    clearRepositionState()
+  }, [clearRuckSelection, clearRepositionState])
 
   const persistCurrentPhaseSnapshot = useCallback(
     (phaseNum: number, snap?: PhaseSnapshot) => {
@@ -870,6 +892,65 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
     if (arrowType === "freedraw") return
 
+    if (arrowType === "reposition") {
+      if (!repositionAssignmentMode) return
+
+      const currentPlayerId = repositionSelectedPlayerIds[repositionAssignmentIndex]
+      if (!currentPlayerId) return
+
+      const player = fieldPlayers.find((p) => p.id === currentPlayerId)
+      if (!player) return
+
+      const newTarget = { playerId: currentPlayerId, toX: x, toY: y }
+      const updatedTargets = [...repositionTargets, newTarget]
+      setRepositionTargets(updatedTargets)
+
+      const nextIndex = repositionAssignmentIndex + 1
+      if (nextIndex >= repositionSelectedPlayerIds.length) {
+        const repositionId = `reposition-${Date.now()}`
+        const arrowTimestamp = (() => {
+          const existing = arrows
+            .map((a) => (a as Arrow & { timestamp?: number }).timestamp)
+            .filter((t): t is number => typeof t === "number")
+          return existing.length > 0 ? Math.max(...existing) + 1 : Date.now()
+        })()
+
+        const newArrows: (Arrow & { timestamp: number })[] = []
+        repositionSelectedPlayerIds.forEach((playerId, index) => {
+          const p = fieldPlayers.find((pl) => pl.id === playerId)
+          const target = updatedTargets.find((t) => t.playerId === playerId)
+          if (!p || !target) return
+          const chainStart = resolvePlayerChainStart(p, arrows)
+          newArrows.push({
+            id: `arrow-${Date.now()}-${index}`,
+            playerId: p.id,
+            team: p.team,
+            fromX: chainStart.x,
+            fromY: chainStart.y,
+            toX: target.toX,
+            toY: target.toY,
+            arrowType: "reposition",
+            repositionId,
+            color: "#f59e0b",
+            timestamp: arrowTimestamp,
+          })
+        })
+
+        if (newArrows.length === 0) return
+
+        setArrows((prev) => [...prev, ...newArrows])
+        setUndoStack((prev) => [
+          ...prev,
+          { type: "add_reposition", repositionId, arrows: newArrows },
+        ])
+        clearRepositionState()
+        setRepositionHintDismissed(true)
+      } else {
+        setRepositionAssignmentIndex(nextIndex)
+      }
+      return
+    }
+
     if (arrowType === "ruck") {
       if (ruckSelectedPlayerIds.length === 0) return
 
@@ -968,7 +1049,25 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setUndoStack(prev => [...prev, { type: "add_arrow", arrow: newArrow }])
       setSelectedBall(false)
     }
-  }, [selectedPlacementToken, mode, selectedPlayerId, selectedBall, fieldPlayers, ball, arrowType, arrowColor, makePlayerAt, ruckSelectedPlayerIds, arrows, clearRuckSelection])
+  }, [
+    selectedPlacementToken,
+    mode,
+    selectedPlayerId,
+    selectedBall,
+    fieldPlayers,
+    ball,
+    arrowType,
+    arrowColor,
+    makePlayerAt,
+    ruckSelectedPlayerIds,
+    arrows,
+    clearRuckSelection,
+    repositionAssignmentMode,
+    repositionAssignmentIndex,
+    repositionSelectedPlayerIds,
+    repositionTargets,
+    clearRepositionState,
+  ])
 
   const handleToggleRuckPlayer = useCallback((playerId: string) => {
     setRuckSelectedPlayerIds((prev) =>
@@ -977,6 +1076,27 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
         : [...prev, playerId]
     )
   }, [])
+
+  const handleToggleRepositionPlayer = useCallback((playerId: string) => {
+    setRepositionSelectedPlayerIds((prev) =>
+      prev.includes(playerId)
+        ? prev.filter((id) => id !== playerId)
+        : [...prev, playerId]
+    )
+  }, [])
+
+  const handleEraseReposition = useCallback(
+    (repositionId: string) => {
+      if (!window.confirm("Remove this reposition group?")) return
+      const groupArrows = arrows.filter((a) => a.repositionId === repositionId)
+      setArrows((prev) => prev.filter((a) => a.repositionId !== repositionId))
+      setUndoStack((prev) => [
+        ...prev,
+        { type: "delete_reposition", repositionId, arrows: groupArrows },
+      ])
+    },
+    [arrows]
+  )
 
   const handleEraseRuck = useCallback(
     (ruckId: string) => {
@@ -996,9 +1116,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const handleToolbarArrowTypeChange = useCallback(
     (type: ArrowType) => {
       clearRuckSelection()
+      clearRepositionState()
       setArrowType(type)
     },
-    [clearRuckSelection]
+    [clearRuckSelection, clearRepositionState]
   )
 
   const handleFreeDrawArrowAdd = useCallback((arrow: Arrow) => {
@@ -1057,6 +1178,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setPhases([])
     setRuckMarkers([])
     setRuckSelectedPlayerIds([])
+    clearRepositionState()
     setSelectedPlayerId(null)
     setSelectionPopoverPos(null)
     setSelectedBall(false)
@@ -1068,7 +1190,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setStartPositions(null)
     setUndoStack([])
     fieldRef.current?.reset()
-  }, [])
+  }, [clearRepositionState])
 
   const handlePlayerSelect = useCallback(
     (playerId: string | null) => {
@@ -1431,25 +1553,35 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setSelectedArrowId(null)
     setPasserSelected(null)
     clearRuckSelection()
-  }, [clearRuckSelection])
+    clearRepositionState()
+  }, [clearRuckSelection, clearRepositionState])
 
   const handleToolbarToolChange = useCallback(
     (tool: ToolbarTool) => {
       setToolbarTool(tool)
       setSelectedPlayerId(null)
       clearRuckSelection()
+      clearRepositionState()
       if (tool === "draw") {
         handleModeChange("draw")
       } else {
         handleModeChange("move")
       }
     },
-    [handleModeChange, clearRuckSelection]
+    [handleModeChange, clearRuckSelection, clearRepositionState]
   )
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (
+          repositionSelectedPlayerIds.length > 0 ||
+          repositionAssignmentMode ||
+          repositionTargets.length > 0
+        ) {
+          clearRepositionState()
+          return
+        }
         if (ruckSelectedPlayerIds.length > 0) {
           clearRuckSelection()
           return
@@ -1467,7 +1599,17 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [toolbarTool, handleModeChange, selectedPlayerId, ruckSelectedPlayerIds, clearRuckSelection])
+  }, [
+    toolbarTool,
+    handleModeChange,
+    selectedPlayerId,
+    ruckSelectedPlayerIds,
+    clearRuckSelection,
+    repositionSelectedPlayerIds,
+    repositionAssignmentMode,
+    repositionTargets,
+    clearRepositionState,
+  ])
 
   const handleAttackCustomColor = useCallback((color: string) => {
     setAttackCustomSwatches((prev) =>
@@ -2102,6 +2244,36 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
 
         {!isPresentationMode &&
         toolbarTool === "draw" &&
+        arrowType === "reposition" &&
+        !repositionHintDismissed ? (
+          <div className="flex shrink-0 items-center justify-center gap-3 border-b border-[#2a2a2a] bg-[#161616] px-3 py-1">
+            <p className="text-[10px] text-[#666]">
+              {!repositionAssignmentMode
+                ? "Select players to reposition, then assign each a target"
+                : (() => {
+                    const currentId =
+                      repositionSelectedPlayerIds[repositionAssignmentIndex]
+                    const currentPlayer = fieldPlayers.find(
+                      (p) => p.id === currentId
+                    )
+                    return `Click field to set target for #${currentPlayer?.number ?? "?"} (${repositionAssignmentIndex + 1} of ${repositionSelectedPlayerIds.length})`
+                  })()}
+            </p>
+            {repositionSelectedPlayerIds.length > 0 && !repositionAssignmentMode ? (
+              <button
+                type="button"
+                onClick={() => setRepositionAssignmentMode(true)}
+                className="rounded px-2 py-0.5 text-[10px] font-medium text-black"
+                style={{ background: "#f59e0b" }}
+              >
+                Assign Targets →
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {!isPresentationMode &&
+        toolbarTool === "draw" &&
         arrowType === "freedraw" &&
         !freeDrawHintDismissed ? (
           <p className="shrink-0 border-b border-[#2a2a2a] bg-[#161616] py-1 text-center text-[10px] text-[#666]">
@@ -2164,6 +2336,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             ruckSelectedPlayerIds={ruckSelectedPlayerIds}
             onToggleRuckPlayer={handleToggleRuckPlayer}
             onEraseRuck={handleEraseRuck}
+            repositionSelectedPlayerIds={repositionSelectedPlayerIds}
+            repositionAssignmentMode={repositionAssignmentMode}
+            repositionAssignmentIndex={repositionAssignmentIndex}
+            repositionTargets={repositionTargets}
+            onToggleRepositionPlayer={handleToggleRepositionPlayer}
+            onEraseReposition={handleEraseReposition}
             arrowColor={arrowColor}
             onFreeDrawArrowAdd={handleFreeDrawArrowAdd}
             onFreeDrawStarted={() => setFreeDrawHintDismissed(true)}

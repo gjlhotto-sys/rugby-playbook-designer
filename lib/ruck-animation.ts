@@ -57,12 +57,13 @@ export function assignArrowSequences(arrows: Arrow[]): SequencedArrow[] {
 
 /**
  * Build animation groups in draw order (arrows array order).
- * Each non-ruck arrow is its own step; all arrows sharing a ruckId animate together
- * as one step at the position of the first ruck arrow in that group.
+ * Each non-grouped arrow is its own step; all arrows sharing a ruckId or repositionId
+ * animate together as one step at the position of the first arrow in that group.
  */
 export function buildAnimationGroupsFromArrows(arrows: Arrow[]): SequencedArrow[][] {
   const groups: SequencedArrow[][] = []
   const seenRuckIds = new Set<string>()
+  const seenRepositionIds = new Set<string>()
 
   for (const arrow of arrows) {
     if (arrow.arrowType === 'ruck' && arrow.ruckId) {
@@ -71,6 +72,14 @@ export function buildAnimationGroupsFromArrows(arrows: Arrow[]): SequencedArrow[
       groups.push(
         arrows.filter(
           (a) => a.arrowType === 'ruck' && a.ruckId === arrow.ruckId
+        ) as SequencedArrow[]
+      )
+    } else if (arrow.arrowType === 'reposition' && arrow.repositionId) {
+      if (seenRepositionIds.has(arrow.repositionId)) continue
+      seenRepositionIds.add(arrow.repositionId)
+      groups.push(
+        arrows.filter(
+          (a) => a.arrowType === 'reposition' && a.repositionId === arrow.repositionId
         ) as SequencedArrow[]
       )
     } else {
