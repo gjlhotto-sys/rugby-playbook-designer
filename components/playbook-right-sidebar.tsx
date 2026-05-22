@@ -151,6 +151,7 @@ interface PlaybookRightSidebarProps {
   canExportVideo: boolean
   onGenerateNotes: () => void
   onSignOut: () => void
+  onUpgrade?: () => void
 }
 
 export function PlaybookRightSidebar({
@@ -186,10 +187,12 @@ export function PlaybookRightSidebar({
   canExportVideo,
   onGenerateNotes,
   onSignOut,
+  onUpgrade,
 }: PlaybookRightSidebarProps) {
   const router = useRouter()
   const hasContent = fieldPlayers.length > 0
   const allPlays = [...savedPlays, ...cloudSavedPlays]
+  const showUpgradeBanner = profile?.role === 'coach'
 
   return (
     <aside
@@ -197,6 +200,22 @@ export function PlaybookRightSidebar({
       style={{ borderLeftWidth: '0.5px' }}
     >
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {showUpgradeBanner && (
+          <div
+            className="mb-2 rounded-lg border border-[#f59e0b] bg-[#1a1a0a] px-3 py-2"
+            style={{ borderWidth: '0.5px' }}
+          >
+            <p className="text-[10px] text-[#f59e0b]">Free plan — 3 play limit</p>
+            <button
+              type="button"
+              onClick={onUpgrade}
+              className="mt-1 w-full rounded py-1.5 text-[11px] font-medium text-white hover:opacity-90"
+              style={{ background: '#C0392B' }}
+            >
+              Upgrade to Pro →
+            </button>
+          </div>
+        )}
         <input
           type="text"
           value={playName}

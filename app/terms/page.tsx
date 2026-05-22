@@ -29,7 +29,7 @@ const SECTIONS: { title: string; body: string }[] = [
 • No sharing or export features
 • Access to basic play designer
 
-Subscriber Plan (R299/month or R2 499/year):
+Subscriber Plan (R299/month or R2,499/year):
 • Unlimited saved plays
 • Full sharing via link and WhatsApp
 • MP4 video export

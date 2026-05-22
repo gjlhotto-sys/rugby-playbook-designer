@@ -158,7 +158,7 @@ export default function PricingPage() {
                 ) : (
                   <>
                     <span className="text-[40px] font-bold leading-none text-white">
-                      R2 499
+                      R2,499
                     </span>
                     <span className="pb-1 text-[14px] text-[#666]">per year</span>
                     <span className="mb-1 rounded-full bg-[#16a34a]/20 px-2 py-0.5 text-[11px] font-medium text-[#86efac]">

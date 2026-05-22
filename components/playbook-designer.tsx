@@ -2020,16 +2020,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     void handleSharePlay()
   }, [isPremium, handleSharePlay])
 
-  const handleUpgrade = () => {
-    const subject = encodeURIComponent('PlayForge Pro Upgrade Request')
-    const body = encodeURIComponent(
-      `Hi Jacques,\n\nI would like to upgrade to PlayForge Pro.\n\nMy account email: ${user?.email}\n\nPlease send me payment details.\n\nThank you`
-    )
-    window.open(
-      `mailto:gjlh.otto@gmail.com?subject=${subject}&body=${body}`,
-      '_blank'
-    )
-    setShowUpgradeModal(false)
+  const handleUpgrade = async (plan: 'monthly' | 'yearly') => {
+    console.log('Upgrade clicked:', plan)
+    // Payment integration coming
   }
 
   const totalPhases = Math.max(
@@ -2673,6 +2666,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           exportVideoProgress={exportVideoProgress}
           canExportVideo={arrows.length > 0 && !isPresentationMode}
           onGenerateNotes={handleGenerateNotes}
+          onUpgrade={() => setShowUpgradeModal(true)}
         />
       )}
       {shareUrl && (
@@ -2767,14 +2761,20 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             </ul>
             <button
               type="button"
-              onClick={handleUpgrade}
-              className="mb-2 w-full rounded-lg bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-500"
+              onClick={() => void handleUpgrade('monthly')}
+              className="mb-2 w-full rounded-lg py-2.5 text-sm font-medium text-white hover:opacity-90"
+              style={{ background: '#C0392B' }}
             >
-              📧 Request Upgrade — R199/month
+              Monthly — R299/month
             </button>
-            <p className="text-[10px] text-gray-400 text-center mt-2">
-              We'll send you payment details within 24 hours
-            </p>
+            <button
+              type="button"
+              onClick={() => void handleUpgrade('yearly')}
+              className="mb-2 w-full rounded-lg py-2.5 text-sm font-medium text-white hover:opacity-90"
+              style={{ background: '#16a34a' }}
+            >
+              Yearly — R2,499/year • Save 30%
+            </button>
             <button
               type="button"
               onClick={() => setShowUpgradeModal(false)}
