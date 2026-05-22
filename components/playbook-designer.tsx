@@ -2020,10 +2020,42 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     void handleSharePlay()
   }, [isPremium, handleSharePlay])
 
-  const handleUpgrade = async (plan: 'monthly' | 'yearly') => {
-    console.log('Upgrade clicked:', plan)
-    // Payment integration coming
-  }
+  const handleUpgrade = useCallback(
+    async (plan: 'monthly' | 'yearly') => {
+      if (!user?.id || !user?.email) return
+
+      setShowUpgradeModal(false)
+
+      try {
+        const response = await fetch('/api/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            plan,
+            userId: user.id,
+            userEmail: user.email,
+          }),
+        })
+
+        const data = await response.json()
+
+        if (data.url) {
+          window.location.href = data.url
+        } else {
+          console.error('No checkout URL:', data)
+          window.alert(
+            'Failed to start checkout. Please try again.'
+          )
+        }
+      } catch (error) {
+        console.error('Upgrade error:', error)
+        window.alert(
+          'Failed to start checkout. Please try again.'
+        )
+      }
+    },
+    [user?.id, user?.email]
+  )
 
   const totalPhases = Math.max(
     5,
@@ -2666,7 +2698,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           exportVideoProgress={exportVideoProgress}
           canExportVideo={arrows.length > 0 && !isPresentationMode}
           onGenerateNotes={handleGenerateNotes}
-          onUpgrade={() => setShowUpgradeModal(true)}
+          onUpgrade={() => void handleUpgrade('monthly')}
         />
       )}
       {shareUrl && (

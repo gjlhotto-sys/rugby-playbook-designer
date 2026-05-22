@@ -61,6 +61,19 @@ export default function Home() {
     }
   }, [router])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('upgraded') === 'true') {
+      window.history.replaceState({}, '', '/')
+      window.alert(
+        '🏉 Welcome to PlayForge Pro! Your subscription is now active. Enjoy unlimited plays!'
+      )
+      getUserProfile().then((updatedProfile) => {
+        if (updatedProfile) setProfile(updatedProfile)
+      })
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-950">

@@ -434,6 +434,19 @@ export function PlaybookRightSidebar({
         className="shrink-0 border-t border-[#2a2a2a] px-3 py-2"
         style={{ borderTopWidth: '0.5px' }}
       >
+        <p className="mb-1 truncate text-[10px] text-[#666]">
+          {profile?.full_name ?? user.email}
+        </p>
+        {profile?.role === 'subscriber' ? (
+          <a
+            href="https://app.lemonsqueezy.com/my-orders"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mb-2 block cursor-pointer text-[10px] text-[#555] underline hover:text-[#888]"
+          >
+            Manage subscription
+          </a>
+        ) : null}
         <button
           type="button"
           onClick={onSignOut}
