@@ -2797,7 +2797,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               className="mb-2 w-full rounded-lg py-2.5 text-sm font-medium text-white hover:opacity-90"
               style={{ background: '#C0392B' }}
             >
-              Monthly — R299/month
+              Monthly — R269/month
             </button>
             <button
               type="button"
@@ -2805,8 +2805,11 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               className="mb-2 w-full rounded-lg py-2.5 text-sm font-medium text-white hover:opacity-90"
               style={{ background: '#16a34a' }}
             >
-              Yearly — R2,499/year • Save 30%
+              Yearly — R2,269/year • Save 30%
             </button>
+            <p className="mb-3 text-center text-[11px] text-muted-foreground">
+              All prices VAT inclusive
+            </p>
             <button
               type="button"
               onClick={() => setShowUpgradeModal(false)}

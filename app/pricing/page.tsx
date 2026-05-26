@@ -151,14 +151,14 @@ export default function PricingPage() {
                 {billing === 'monthly' ? (
                   <>
                     <span className="text-[40px] font-bold leading-none text-white">
-                      R299
+                      R269
                     </span>
                     <span className="pb-1 text-[14px] text-[#666]">per month</span>
                   </>
                 ) : (
                   <>
                     <span className="text-[40px] font-bold leading-none text-white">
-                      R2,499
+                      R2,269
                     </span>
                     <span className="pb-1 text-[14px] text-[#666]">per year</span>
                     <span className="mb-1 rounded-full bg-[#16a34a]/20 px-2 py-0.5 text-[11px] font-medium text-[#86efac]">
@@ -167,6 +167,11 @@ export default function PricingPage() {
                   </>
                 )}
               </div>
+              {billing === 'annual' && (
+                <p className="mt-2 text-[11px] text-[#666]">
+                  R269 × 12 = R3,228 vs R2,269 = R959 saving
+                </p>
+              )}
 
               <ul className="mt-6 flex flex-1 flex-col gap-2.5">
                 {SUBSCRIBER_FEATURES.map((label) => (
@@ -189,6 +194,9 @@ export default function PricingPage() {
           </div>
         </div>
 
+        <p className="mt-4 text-center text-[11px] text-[#555]">
+          All prices include 15% VAT
+        </p>
         <p className="mt-8 text-center text-[12px] text-[#555]">
           All plans include a 14-day refund policy on annual subscriptions
         </p>
