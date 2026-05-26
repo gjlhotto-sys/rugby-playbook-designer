@@ -14,13 +14,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const isLive =
+      process.env.NODE_ENV === 'production' &&
+      process.env.LEMONSQUEEZY_LIVE_MODE === 'true'
+
+    const apiKey = isLive
+      ? process.env.LEMONSQUEEZY_API_KEY_LIVE!
+      : process.env.LEMONSQUEEZY_API_KEY!
+
+    const storeId = isLive
+      ? (process.env.LEMONSQUEEZY_STORE_ID_LIVE ??
+          process.env.LEMONSQUEEZY_STORE_ID)!
+      : process.env.LEMONSQUEEZY_STORE_ID!
+
     const variantId =
       plan === 'yearly'
-        ? process.env.LEMONSQUEEZY_YEARLY_VARIANT_ID!
-        : process.env.LEMONSQUEEZY_MONTHLY_VARIANT_ID!
+        ? isLive
+          ? process.env.LEMONSQUEEZY_YEARLY_VARIANT_ID_LIVE!
+          : process.env.LEMONSQUEEZY_YEARLY_VARIANT_ID!
+        : isLive
+          ? process.env.LEMONSQUEEZY_MONTHLY_VARIANT_ID_LIVE!
+          : process.env.LEMONSQUEEZY_MONTHLY_VARIANT_ID!
 
     const checkout = await createCheckoutSession({
       variantId,
+      storeId,
+      apiKey,
       userEmail,
       userId,
       plan,

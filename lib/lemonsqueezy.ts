@@ -12,18 +12,23 @@ export function setupLemonSqueezy() {
 
 export async function createCheckoutSession({
   variantId,
+  storeId,
+  apiKey,
   userEmail,
   userId,
   plan,
 }: {
   variantId: string
+  storeId: string
+  apiKey: string
   userEmail: string
   userId: string
   plan: 'monthly' | 'yearly'
 }) {
-  setupLemonSqueezy()
-
-  const storeId = process.env.LEMONSQUEEZY_STORE_ID!
+  lemonSqueezySetup({
+    apiKey,
+    onError: (error) => console.error('LS error:', error),
+  })
 
   const checkout = await createCheckout(storeId, variantId, {
     checkoutOptions: {
