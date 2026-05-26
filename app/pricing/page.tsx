@@ -39,7 +39,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Is my payment secure?',
-    a: 'Yes. All payments are processed by PayFast, a leading South African payment gateway. We never store your card details.',
+    a: 'Yes. All payments are processed by Lemon Squeezy, a trusted international payment processor who acts as the Merchant of Record. We never store your card details.',
   },
   {
     q: 'Do you offer team or school discounts?',
@@ -169,7 +169,7 @@ export default function PricingPage() {
               </div>
               {billing === 'annual' && (
                 <p className="mt-2 text-[11px] text-[#666]">
-                  R269 × 12 = R3,228 vs R2,269 = R959 saving
+                  R269 × 12 = R3,228 vs R2,269 = save R959
                 </p>
               )}
 
@@ -195,7 +195,7 @@ export default function PricingPage() {
         </div>
 
         <p className="mt-4 text-center text-[11px] text-[#555]">
-          All prices include 15% VAT
+          All prices include 15% VAT · Payments securely processed by Lemon Squeezy
         </p>
         <p className="mt-8 text-center text-[12px] text-[#555]">
           All plans include a 14-day refund policy on annual subscriptions

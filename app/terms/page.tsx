@@ -30,8 +30,8 @@ const SECTIONS: { title: string; body: string }[] = [
 • Access to basic play designer
 
 Subscriber Plan:
-• Monthly R269/month (VAT inclusive)
-• Yearly R2,269/year (VAT inclusive)
+• Monthly: R269/month (VAT inclusive)
+• Yearly: R2,269/year (VAT inclusive)
 • Unlimited saved plays
 • Full sharing via link and WhatsApp
 • MP4 video export
@@ -41,15 +41,17 @@ Subscriber Plan:
   },
   {
     title: 'PAYMENT',
-    body: `• Payments are processed securely via PayFast
-• All prices are in South African Rand (ZAR) and include VAT where applicable
+    body: `• Payments are processed securely via Lemon Squeezy, our payment processor and Merchant of Record
+• All prices are in South African Rand (ZAR) and are VAT inclusive
+• Lemon Squeezy acts as the Merchant of Record for all transactions — your payment relationship is with Lemon Squeezy
 • Monthly subscriptions are billed every 30 days from the date of first payment
 • Annual subscriptions are billed once per year from the date of first payment
-• Payment methods accepted: credit/debit card, EFT, SnapScan via PayFast`,
+• Payment methods accepted: credit/debit card via Lemon Squeezy's secure checkout
+• Your card details are never stored by PlayForge — all payment data is handled by Lemon Squeezy`,
   },
   {
     title: 'CANCELLATION',
-    body: `• You may cancel your subscription at any time from your account settings or by emailing gjlh.otto@gmail.com
+    body: `• You may cancel your subscription at any time via the Manage Subscription link in your PlayForge account, or by emailing gjlh.otto@gmail.com
 • Cancellation takes effect at the end of the current billing period
 • You will retain access to Subscriber features until the end of the paid period
 • After cancellation your account reverts to the Free Plan and plays exceeding the free limit will be read-only (not deleted)`,
@@ -57,8 +59,9 @@ Subscriber Plan:
   {
     title: 'REFUNDS',
     body: `• Monthly subscriptions are non-refundable once the billing period has started
-• Annual subscriptions may be refunded on a pro-rata basis within 14 days of purchase if the Service has not been substantially used
+• Annual subscriptions may be refunded within 14 days of purchase if the Service has not been substantially used
 • Refund requests must be submitted to gjlh.otto@gmail.com
+• As Lemon Squeezy is the Merchant of Record, refunds are processed by Lemon Squeezy in accordance with their refund policy
 • We reserve the right to decline refund requests that do not meet these criteria`,
   },
   {
