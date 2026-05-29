@@ -8,6 +8,8 @@ interface PlaybookDesignStatusBarProps {
   totalPhases: number
   onCyclePhase: () => void
   userLabel: string
+  compactPortrait?: boolean
+  tabletLandscape?: boolean
 }
 
 export function PlaybookDesignStatusBar({
@@ -18,10 +20,18 @@ export function PlaybookDesignStatusBar({
   totalPhases,
   onCyclePhase,
   userLabel,
+  compactPortrait = false,
+  tabletLandscape = false,
 }: PlaybookDesignStatusBarProps) {
+  if (compactPortrait) {
+    return null
+  }
+
   return (
     <div
-      className="flex shrink-0 items-center justify-between gap-3 border-t border-[#2a2a2a] bg-[#161616] px-3.5 py-1.5"
+      className={`flex shrink-0 items-center justify-between gap-3 border-t border-[#2a2a2a] bg-[#161616] px-3.5 ${
+        tabletLandscape ? 'py-1' : 'py-1.5'
+      }`}
       style={{ borderTopWidth: '0.5px' }}
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-[#888]">

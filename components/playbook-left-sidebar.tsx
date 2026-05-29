@@ -16,19 +16,33 @@ import type { SidebarPlacementToken } from './playbook-sidebar'
 
 export type { FormationId }
 
+export type SidebarTouchPlacementPayload = {
+  id: string
+  number: number
+  position: string
+  abbr: string
+  team: 'attack' | 'defense'
+}
+
 function PlayerToken({
   player,
   team,
   selected,
   onSelect,
+  tokenSize,
+  enableTouchPlacement,
+  onTouchPlacementDrag,
 }: {
   player: PlayerTemplate
   team: 'attack' | 'defense'
   selected: boolean
   onSelect: () => void
+  tokenSize: number
+  enableTouchPlacement?: boolean
+  onTouchPlacementDrag?: (payload: SidebarTouchPlacementPayload | null) => void
 }) {
   const handleDragStart = (e: React.DragEvent) => {
-    const data = {
+    const data: SidebarTouchPlacementPayload = {
       id: `${team}-${player.number}-${Date.now()}`,
       number: player.number,
       position: player.position,
@@ -39,6 +53,14 @@ function PlayerToken({
     e.dataTransfer.effectAllowed = 'move'
   }
 
+  const buildPlacementPayload = (): SidebarTouchPlacementPayload => ({
+    id: `${team}-${player.number}-${Date.now()}`,
+    number: player.number,
+    position: player.position,
+    abbr: player.abbr,
+    team,
+  })
+
   const isAttack = team === 'attack'
 
   return (
@@ -47,18 +69,45 @@ function PlayerToken({
       draggable
       onDragStart={handleDragStart}
       onClick={onSelect}
+      onTouchStart={(e) => {
+        if (!enableTouchPlacement || !onTouchPlacementDrag) return
+        const touch = e.touches[0]
+        if (!touch) return
+        e.preventDefault()
+        onTouchPlacementDrag(buildPlacementPayload())
+        e.stopPropagation()
+      }}
+      onTouchMove={(e) => {
+        if (!enableTouchPlacement || !onTouchPlacementDrag) return
+        const touch = e.touches[0]
+        if (!touch) return
+        e.preventDefault()
+        onTouchPlacementDrag(buildPlacementPayload())
+      }}
+      onTouchEnd={() => {
+        if (!enableTouchPlacement || !onTouchPlacementDrag) return
+      }}
+      onTouchCancel={() => {
+        if (!enableTouchPlacement) return
+        onTouchPlacementDrag?.(null)
+      }}
       className={`flex w-[40px] flex-col items-center gap-[3px] rounded-md transition-all ${
         selected ? 'ring-1 ring-[#C0392B]' : 'hover:bg-white/5'
       }`}
       style={{ padding: '2px 8px' }}
     >
       <div
-        className={`flex h-[26px] w-[26px] items-center justify-center rounded-full border text-[9px] font-bold ${
+        className={`flex items-center justify-center rounded-full border text-[9px] font-bold ${
           isAttack
             ? 'border-[#2563eb] bg-[#1a3a6e] text-[#93c5fd]'
             : 'border-[#dc2626] bg-[#6e1a1a] text-[#fca5a5]'
         }`}
-        style={{ borderWidth: '0.5px' }}
+        style={{
+          borderWidth: '0.5px',
+          width: tokenSize,
+          height: tokenSize,
+          fontSize: tokenSize <= 22 ? 8 : 9,
+        }}
       >
         {player.number}
       </div>
@@ -67,7 +116,7 @@ function PlayerToken({
   )
 }
 
-interface PlaybookLeftSidebarProps {
+export interface PlaybookLeftSidebarProps {
   attackPlayers: PlayerTemplate[]
   defensePlayers: PlayerTemplate[]
   fieldPlayers: FieldPlayer[]
@@ -94,6 +143,12 @@ interface PlaybookLeftSidebarProps {
   onFormationDropdownChange?: (formationId: string) => void
   onOpenSaveFormation?: () => void
   onOpenManageFormations?: () => void
+  /** Desktop sidebar (default) or embedded in mobile drawer */
+  variant?: 'desktop' | 'embedded'
+  contentMode?: 'full' | 'players' | 'formation'
+  tokenSize?: number
+  enableTouchPlacement?: boolean
+  onTouchPlacementDrag?: (payload: SidebarTouchPlacementPayload | null) => void
 }
 
 const FORMATIONS: { id: FormationId; label: string }[] = [
@@ -131,6 +186,11 @@ export function PlaybookLeftSidebar({
   onFormationDropdownChange,
   onOpenSaveFormation,
   onOpenManageFormations,
+  variant = 'desktop',
+  contentMode = 'full',
+  tokenSize = 26,
+  enableTouchPlacement = false,
+  onTouchPlacementDrag,
 }: PlaybookLeftSidebarProps) {
   const attackOnField = fieldPlayers.filter((p) => p.team === 'attack').length
   const defenseOnField = fieldPlayers.filter((p) => p.team === 'defense').length
@@ -157,29 +217,38 @@ export function PlaybookLeftSidebar({
     }
   }
 
-  return (
-    <aside
-      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-[#2a2a2a] bg-[#161616] lg:flex"
-      style={{ borderRightWidth: '0.5px' }}
-    >
-      <div
-        className="shrink-0 border-b border-[#2a2a2a] px-3 py-3"
-        style={{ borderBottomWidth: '0.5px' }}
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-md bg-[#C0392B] text-white"
-          >
-            <Zap className="h-4 w-4" strokeWidth={2.5} />
-          </div>
-          <div>
-            <p className="text-sm font-bold tracking-tight text-white">PlayForge</p>
-            <p className="text-[9px] uppercase tracking-widest text-[#666]">Play Designer</p>
+  const showPlayers = contentMode === 'full' || contentMode === 'players'
+  const showFormation = contentMode === 'full' || contentMode === 'formation'
+  const showHeader = variant === 'desktop'
+  const showTools = contentMode === 'full' || contentMode === 'formation'
+
+  const inner = (
+    <>
+      {showHeader ? (
+        <div
+          className="shrink-0 border-b border-[#2a2a2a] px-3 py-3"
+          style={{ borderBottomWidth: '0.5px' }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-[#C0392B] text-white">
+              <Zap className="h-4 w-4" strokeWidth={2.5} />
+            </div>
+            <div>
+              <p className="text-sm font-bold tracking-tight text-white">PlayForge</p>
+              <p className="text-[9px] uppercase tracking-widest text-[#666]">
+                Play Designer
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {showFormation ? (
+          <>
         <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
           Formation
         </p>
@@ -248,12 +317,18 @@ export function PlaybookLeftSidebar({
             </button>
           </div>
         )}
+          </>
+        ) : null}
 
-        <div
-          className="mb-3 border-t border-[#2a2a2a]"
-          style={{ borderTopWidth: '0.5px' }}
-        />
+        {showPlayers && showFormation ? (
+          <div
+            className="mb-3 border-t border-[#2a2a2a]"
+            style={{ borderTopWidth: '0.5px' }}
+          />
+        ) : null}
 
+        {showPlayers ? (
+          <>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-[10px] font-semibold text-[#60a5fa]">ATTACK</p>
           <span className="text-[9px] text-[#555]">{attackOnField}/15</span>
@@ -267,6 +342,9 @@ export function PlaybookLeftSidebar({
                 key={`a-${player.number}`}
                 player={player}
                 team="attack"
+                tokenSize={tokenSize}
+                enableTouchPlacement={enableTouchPlacement}
+                onTouchPlacementDrag={onTouchPlacementDrag}
                 selected={
                   selectedPlacementToken?.type === 'player' &&
                   selectedPlacementToken.team === 'attack' &&
@@ -293,6 +371,9 @@ export function PlaybookLeftSidebar({
                 key={`a-${player.number}`}
                 player={player}
                 team="attack"
+                tokenSize={tokenSize}
+                enableTouchPlacement={enableTouchPlacement}
+                onTouchPlacementDrag={onTouchPlacementDrag}
                 selected={
                   selectedPlacementToken?.type === 'player' &&
                   selectedPlacementToken.team === 'attack' &&
@@ -329,6 +410,9 @@ export function PlaybookLeftSidebar({
                 key={`d-${player.number}`}
                 player={player}
                 team="defense"
+                tokenSize={tokenSize}
+                enableTouchPlacement={enableTouchPlacement}
+                onTouchPlacementDrag={onTouchPlacementDrag}
                 selected={
                   selectedPlacementToken?.type === 'player' &&
                   selectedPlacementToken.team === 'defense' &&
@@ -355,6 +439,9 @@ export function PlaybookLeftSidebar({
                 key={`d-${player.number}`}
                 player={player}
                 team="defense"
+                tokenSize={tokenSize}
+                enableTouchPlacement={enableTouchPlacement}
+                onTouchPlacementDrag={onTouchPlacementDrag}
                 selected={
                   selectedPlacementToken?.type === 'player' &&
                   selectedPlacementToken.team === 'defense' &&
@@ -372,7 +459,11 @@ export function PlaybookLeftSidebar({
               />
             ))}
         </div>
+          </>
+        ) : null}
 
+        {showFormation ? (
+          <>
         <p className="mb-2 text-[9px] font-medium uppercase tracking-wider text-[#666]">
           Phases
         </p>
@@ -432,6 +523,7 @@ export function PlaybookLeftSidebar({
           })}
         </div>
 
+        {showTools ? (
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -474,7 +566,23 @@ export function PlaybookLeftSidebar({
             Redo
           </button>
         </div>
+        ) : null}
+          </>
+        ) : null}
       </div>
+    </>
+  )
+
+  if (variant === 'embedded') {
+    return <div className="flex h-full w-full flex-col overflow-hidden">{inner}</div>
+  }
+
+  return (
+    <aside
+      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-r border-[#2a2a2a] bg-[#161616] lg:flex"
+      style={{ borderRightWidth: '0.5px' }}
+    >
+      {inner}
     </aside>
   )
 }

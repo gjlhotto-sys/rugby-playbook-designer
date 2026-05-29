@@ -17,7 +17,15 @@ import {
 } from "./playbook-player-color-popover"
 import { getFieldCanvasScreenPoint } from "@/lib/field-canvas-coords"
 import { getViewBoxForZone, type FieldZone } from "@/lib/field-zones"
-import { Menu, X } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { useIsTouchDevice } from "@/lib/hooks/useIsTouchDevice"
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery"
+import { touchDistance } from "@/lib/touch-pointer"
+import { screenToSvgCoords } from "@/lib/field-zones"
+import {
+  PlaybookMobileDrawer,
+} from "./playbook-mobile-drawer"
+import type { SidebarTouchPlacementPayload } from "./playbook-left-sidebar"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot, RuckMarker } from "@/lib/types"
 import { RUGBY_POSITIONS } from "@/lib/types"
 import type { PlayCategory } from "@/lib/play-metadata"
@@ -124,7 +132,25 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const [currentPhaseView, setCurrentPhaseView] = useState(1)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [activePlayId, setActivePlayId] = useState<string | null>(null)
-  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true)
+  const [rightPanelOpen, setRightPanelOpen] = useState(true)
+  const [iosPresentationActive, setIosPresentationActive] = useState(false)
+  const [touchPlacementGhost, setTouchPlacementGhost] = useState<{
+    payload: SidebarTouchPlacementPayload
+    clientX: number
+    clientY: number
+  } | null>(null)
+  const touchPlacementPayloadRef = useRef<SidebarTouchPlacementPayload | null>(null)
+  const touchPanActive = useRef(false)
+  const pinchRef = useRef<{ distance: number; zoom: number } | null>(null)
+  const isTouch = useIsTouchDevice()
+  const isMobile = useMediaQuery("(max-width: 639px)")
+  const isBelowLg = useMediaQuery("(max-width: 1023px)")
+  const isTabletLandscape = useMediaQuery(
+    "(min-width: 768px) and (max-width: 1023px) and (orientation: landscape)"
+  )
+  const showMobileDrawer = isBelowLg && !isTabletLandscape
   const [selectionPopoverPos, setSelectionPopoverPos] = useState<{
     left: number
     top: number
@@ -1814,14 +1840,25 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
   }, [toolbarTool, mode, selectedPlayer, selectedArrow])
 
+  const isIOS =
+    typeof navigator !== "undefined" &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent)
+
   const handleEnterPresentation = useCallback(async () => {
     try {
+      if (isIOS) {
+        setIosPresentationActive(true)
+        setIsPresentationMode(true)
+        return
+      }
       await document.documentElement.requestFullscreen()
       setIsPresentationMode(true)
     } catch (error) {
       console.error("Failed to enter fullscreen:", error)
+      setIosPresentationActive(true)
+      setIsPresentationMode(true)
     }
-  }, [])
+  }, [isIOS])
 
   const handleExitPresentation = useCallback(async () => {
     try {
@@ -1831,9 +1868,149 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     } catch (error) {
       console.error("Failed to exit fullscreen:", error)
     } finally {
+      setIosPresentationActive(false)
       setIsPresentationMode(false)
     }
   }, [])
+
+  const handleTouchPlacementDrag = useCallback(
+    (payload: SidebarTouchPlacementPayload | null) => {
+      touchPlacementPayloadRef.current = payload
+      if (!payload) {
+        setTouchPlacementGhost(null)
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1 || !touchPlacementPayloadRef.current) return
+      const t = e.touches[0]
+      setTouchPlacementGhost({
+        payload: touchPlacementPayloadRef.current,
+        clientX: t.clientX,
+        clientY: t.clientY,
+      })
+    }
+    window.addEventListener("touchmove", onMove, { passive: false })
+    return () => window.removeEventListener("touchmove", onMove)
+  }, [])
+
+  const placeTouchTokenOnField = useCallback(
+    (clientX: number, clientY: number) => {
+      const payload = touchPlacementPayloadRef.current
+      const svg = document.querySelector("[data-field-canvas] svg")
+      if (!payload || !svg) return false
+      const rect = svg.getBoundingClientRect()
+      const { x, y } = screenToSvgCoords(clientX, clientY, rect, fieldViewBox)
+      handlePlayerDrop(payload.id, x, y)
+      touchPlacementPayloadRef.current = null
+      setTouchPlacementGhost(null)
+      return true
+    },
+    [fieldViewBox, handlePlayerDrop]
+  )
+
+  const handleFieldContainerTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+        touchPanActive.current = false
+        isPanning.current = false
+        pinchRef.current = {
+          distance: touchDistance(e.touches[0], e.touches[1]),
+          zoom,
+        }
+        return
+      }
+      if (e.touches.length !== 1) return
+      if (touchPlacementPayloadRef.current) return
+      const target = e.target as HTMLElement
+      if (
+        target.closest(".player-token") ||
+        target.closest("button") ||
+        target.closest("[data-play-button]")
+      ) {
+        return
+      }
+      if (zoom > 1) {
+        touchPanActive.current = true
+        isPanning.current = true
+        const t = e.touches[0]
+        panStart.current = { x: t.clientX, y: t.clientY, panX, panY }
+      }
+    },
+    [zoom, panX, panY]
+  )
+
+  const handleFieldContainerTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        e.preventDefault()
+        const dist = touchDistance(e.touches[0], e.touches[1])
+        const ratio = dist / pinchRef.current.distance
+        setZoom(
+          Math.max(0.5, Math.min(2.0, pinchRef.current.zoom * ratio))
+        )
+        return
+      }
+      if (
+        !touchPanActive.current ||
+        !isPanning.current ||
+        !fieldContainerRef.current ||
+        e.touches.length !== 1
+      ) {
+        return
+      }
+      e.preventDefault()
+      const t = e.touches[0]
+      const dx = t.clientX - panStart.current.x
+      const dy = t.clientY - panStart.current.y
+      const rect = fieldContainerRef.current.getBoundingClientRect()
+      const maxPanX = ((zoom - 1) * rect.width) / 2
+      const maxPanY = ((zoom - 1) * rect.height) / 2
+      setPanX(
+        Math.max(-maxPanX, Math.min(maxPanX, panStart.current.panX + dx / zoom))
+      )
+      setPanY(
+        Math.max(-maxPanY, Math.min(maxPanY, panStart.current.panY + dy / zoom))
+      )
+    },
+    [zoom]
+  )
+
+  const handleFieldContainerTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      // If a pan/pinch gesture occurred, suppress the trailing ghost click
+      // so it doesn't reach the field's onClick and place/deselect anything.
+      const didGesture = touchPanActive.current || pinchRef.current !== null
+      pinchRef.current = null
+      touchPanActive.current = false
+      isPanning.current = false
+      if (didGesture) {
+        e.preventDefault()
+      }
+      if (e.changedTouches.length === 1 && touchPlacementPayloadRef.current) {
+        const t = e.changedTouches[0]
+        const onField = (e.target as HTMLElement).closest("[data-field-canvas]")
+        if (onField) {
+          placeTouchTokenOnField(t.clientX, t.clientY)
+        } else {
+          touchPlacementPayloadRef.current = null
+          setTouchPlacementGhost(null)
+        }
+      }
+    },
+    [placeTouchTokenOnField]
+  )
+
+  const handlePlayerLongPress = useCallback(
+    (playerId: string, clientX: number, clientY: number) => {
+      setSelectedPlayerId(playerId)
+      setSelectionPopoverPos({ left: clientX, top: clientY })
+    },
+    []
+  )
 
   const handleTeamColorChange = useCallback((team: "attack" | "defense" | "attackArrow" | "defenceArrow", color: string) => {
     setTeamColors(prev => ({ ...prev, [team]: color }))
@@ -2240,47 +2417,125 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     }
   }, [])
 
+  const leftSidebarProps = {
+    attackPlayers: RUGBY_POSITIONS,
+    defensePlayers: RUGBY_POSITIONS,
+    fieldPlayers,
+    selectedPlacementToken,
+    onSelectPlacementToken: setSelectedPlacementToken,
+    activeFormation,
+    onFormationSelect: setActiveFormation,
+    onApplyScrumFormation: handleApplyScrumFormation,
+    onApplyLineoutFormation: handleApplyLineoutFormation,
+    onApplyBothTeamsFormation: handleApplyBothTeamsFormation,
+    onApplyKickoffFormation: handleApplyKickoffFormation,
+    onApplyFreePlayFormation: handleApplyFreePlayFormation,
+    currentPhase: currentPhaseView,
+    onPhaseSelect: handlePhaseSelect,
+    onAddPhase: handleAddPhase,
+    onUndo: handleUndo,
+    canUndo: undoStack.length > 0,
+    onLabelTool: () => {
+      setToolbarTool("select")
+      handleModeChange("text")
+      setSelectedPlacementToken(null)
+    },
+    onConeTool: () =>
+      setSelectedPlacementToken((prev) =>
+        prev?.type === "cone" ? null : { type: "cone" }
+      ),
+    isLoggedIn: !!user?.id,
+    savedFormations,
+    formationsLoading,
+    formationDropdownValue,
+    onFormationDropdownChange: handleFormationDropdownChange,
+    onOpenSaveFormation: () => setShowSaveFormationModal(true),
+    onOpenManageFormations: () => setShowManageFormationsModal(true),
+    onTouchPlacementDrag: handleTouchPlacementDrag,
+  }
+
+  const rightSidebarProps = {
+    user,
+    profile,
+    isPremium,
+    onSignOut: handleSignOut,
+    playName,
+    activePlayId,
+    playCategory,
+    attackCustomSwatches,
+    defenceCustomSwatches,
+    notes,
+    onPlayNameChange: setPlayName,
+    onPlayCategoryChange: setPlayCategory,
+    onAttackCustomColor: handleAttackCustomColor,
+    onDefenceCustomColor: handleDefenceCustomColor,
+    onNotesChange: setNotes,
+    fieldPlayers,
+    teamColors,
+    savedPlays,
+    cloudSavedPlays,
+    onTeamColorChange: handleTeamColorChange,
+    onSavePlay: handleSavePlay,
+    onLoadPlay: handleLoadPlay,
+    onDeletePlay: handleDeletePlay,
+    onDuplicatePlay: handleDuplicatePlay,
+    onExportPDF: handleExportPDF,
+    onExportVideo: handleOpenExportVideo,
+    onSharePlay: handleOpenSharePlay,
+    isSharing,
+    isExportingVideo,
+    exportVideoProgress,
+    canExportVideo: arrows.length > 0 && !isPresentationMode,
+    onGenerateNotes: handleGenerateNotes,
+    onUpgrade: () => void handleUpgrade("monthly"),
+  }
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0f0f0f]">
+    <div
+      className={`flex h-screen w-screen overflow-hidden bg-[#0f0f0f] ${
+        iosPresentationActive ? "fixed inset-0 z-[9999]" : ""
+      }`}
+    >
       {!isPresentationMode && (
-        <PlaybookLeftSidebar
-          attackPlayers={RUGBY_POSITIONS}
-          defensePlayers={RUGBY_POSITIONS}
-          fieldPlayers={fieldPlayers}
-          selectedPlacementToken={selectedPlacementToken}
-          onSelectPlacementToken={setSelectedPlacementToken}
-          activeFormation={activeFormation}
-          onFormationSelect={setActiveFormation}
-          onApplyScrumFormation={handleApplyScrumFormation}
-          onApplyLineoutFormation={handleApplyLineoutFormation}
-          onApplyBothTeamsFormation={handleApplyBothTeamsFormation}
-          onApplyKickoffFormation={handleApplyKickoffFormation}
-          onApplyFreePlayFormation={handleApplyFreePlayFormation}
-          currentPhase={currentPhaseView}
-          onPhaseSelect={handlePhaseSelect}
-          onAddPhase={handleAddPhase}
-          onUndo={handleUndo}
-          canUndo={undoStack.length > 0}
-          onLabelTool={() => {
-            setToolbarTool("select")
-            handleModeChange("text")
-            setSelectedPlacementToken(null)
-          }}
-          onConeTool={() =>
-            setSelectedPlacementToken((prev) =>
-              prev?.type === "cone" ? null : { type: "cone" }
-            )
-          }
-          isLoggedIn={!!user?.id}
-          savedFormations={savedFormations}
-          formationsLoading={formationsLoading}
-          formationDropdownValue={formationDropdownValue}
-          onFormationDropdownChange={handleFormationDropdownChange}
-          onOpenSaveFormation={() => setShowSaveFormationModal(true)}
-          onOpenManageFormations={() => setShowManageFormationsModal(true)}
-        />
+        <div className="hidden w-[220px] shrink-0 lg:flex">
+          <PlaybookLeftSidebar {...leftSidebarProps} />
+        </div>
       )}
-      <main className="flex min-w-0 flex-1 flex-col">
+
+      {!isPresentationMode && isTabletLandscape && (
+        <div
+          className={`relative hidden shrink-0 transition-all duration-300 md:flex lg:hidden ${
+            leftPanelOpen ? "w-[180px]" : "w-0 overflow-hidden"
+          }`}
+        >
+          <div className="h-full w-[180px] shrink-0">
+            <PlaybookLeftSidebar
+              {...leftSidebarProps}
+              variant="embedded"
+              enableTouchPlacement={isTouch}
+            />
+          </div>
+          <button
+            type="button"
+            className="absolute -right-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#161616] text-[#aaa] hover:text-white"
+            style={{ borderWidth: "0.5px" }}
+            onClick={() => setLeftPanelOpen((o) => !o)}
+            aria-label={leftPanelOpen ? "Collapse left panel" : "Expand left panel"}
+          >
+            {leftPanelOpen ? (
+              <ChevronLeft className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      )}
+
+      <main
+        className={`flex min-w-0 flex-1 flex-col ${
+          showMobileDrawer ? (isMobile ? "max-lg:h-[55vh]" : "max-lg:h-[60vh]") : ""
+        }`}
+      >
         {!isPresentationMode && (
           <PlaybookDesignToolbar
             toolbarTool={toolbarTool}
@@ -2310,6 +2565,9 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             onArrowOpacityChange={(opacity) =>
               setLayerVisibility((prev) => ({ ...prev, arrowOpacity: opacity }))
             }
+            isTouch={isTouch}
+            compactPortrait={showMobileDrawer}
+            isMobile={isMobile}
           />
         )}
 
@@ -2365,7 +2623,13 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           ref={fieldContainerRef}
           className={`relative min-h-0 flex-1 bg-[#0f0f0f] ${
             activeZone === "full" ? "p-2" : "p-0"
-          } ${toolbarTool === "erase" ? "cursor-crosshair" : ""}`}
+          } ${toolbarTool === "erase" ? "cursor-crosshair" : ""} ${
+            showMobileDrawer ? "max-lg:flex-none" : ""
+          }`}
+          style={{ touchAction: "none" }}
+          onTouchStart={handleFieldContainerTouchStart}
+          onTouchMove={handleFieldContainerTouchMove}
+          onTouchEnd={handleFieldContainerTouchEnd}
           onMouseDown={(e) => {
             if (zoom <= 1) return
             if (e.altKey || e.button === 1) {
@@ -2478,8 +2742,22 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             onAnimationFinished={handleAnimationFinished}
             layerVisibility={layerVisibility}
             eraseMode={toolbarTool === "erase"}
+            mobileTokenScale={isMobile ? 0.85 : 1}
+            onPlayerLongPress={handlePlayerLongPress}
             />
           </div>
+          {touchPlacementGhost ? (
+            <div
+              className="pointer-events-none fixed z-[100] flex h-[26px] w-[26px] items-center justify-center rounded-full border border-[#2563eb] bg-[#1a3a6e] text-[9px] font-bold text-[#93c5fd]"
+              style={{
+                borderWidth: "0.5px",
+                left: touchPlacementGhost.clientX - 13,
+                top: touchPlacementGhost.clientY - 13,
+              }}
+            >
+              {touchPlacementGhost.payload.number}
+            </div>
+          ) : null}
           {showPhaseCopyBanner && currentPhaseView > 1 ? (
             <div
               className="pointer-events-auto absolute left-1/2 top-3 z-50 flex -translate-x-1/2 flex-wrap items-center justify-center gap-3 rounded-lg border border-[#4a3a9a] bg-[#1a1a2a] px-4 py-2.5"
@@ -2595,111 +2873,72 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             totalPhases={totalPhases}
             onCyclePhase={handleCyclePhase}
             userLabel={profile?.full_name ?? user.email ?? ""}
+            compactPortrait={showMobileDrawer}
+            tabletLandscape={isTabletLandscape}
           />
         )}
       </main>
 
-      {!isPresentationMode && (
-        <>
-          <button
-            type="button"
-            onClick={() => setMobileToolsOpen((o) => !o)}
-            className="fixed bottom-4 left-4 z-40 flex h-11 w-11 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#161616] text-white shadow-lg lg:hidden"
-            style={{ borderWidth: '0.5px' }}
-            aria-label="Tools"
-          >
-            {mobileToolsOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
-          {mobileToolsOpen ? (
-            <div
-              className="fixed inset-x-0 bottom-0 z-40 max-h-[72vh] overflow-y-auto border-t border-[#2a2a2a] bg-[#161616] p-4 lg:hidden"
-              style={{ borderTopWidth: '0.5px' }}
-            >
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#666]">
-                Quick tools
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {(['select', 'draw', 'erase'] as const).map((tool) => (
-                  <button
-                    key={tool}
-                    type="button"
-                    onClick={() => {
-                      handleToolbarToolChange(tool)
-                      setMobileToolsOpen(false)
-                    }}
-                    className={`rounded-md px-3 py-2 text-xs capitalize ${
-                      toolbarTool === tool
-                        ? 'bg-[#C0392B] text-white'
-                        : 'bg-[#1f1f1f] text-[#aaa]'
-                    }`}
-                  >
-                    {tool}
-                  </button>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleSavePlay()
-                    setMobileToolsOpen(false)
-                  }}
-                  className="rounded-lg bg-[#C0392B] px-3 py-2 text-xs text-white"
-                >
-                  Save play
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleToolbarAnimate()
-                    setMobileToolsOpen(false)
-                  }}
-                  className="rounded-lg border border-[#16a34a] bg-[#1a2a1a] px-3 py-2 text-xs text-[#86efac]"
-                >
-                  Animate
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </>
+      {!isPresentationMode && showMobileDrawer && (
+        <PlaybookMobileDrawer
+          open={mobileDrawerOpen}
+          onOpenChange={setMobileDrawerOpen}
+          isMobile={isMobile}
+          isTouch={isTouch}
+          arrowType={arrowType}
+          onArrowTypeChange={handleToolbarArrowTypeChange}
+          leftSidebarProps={{
+            ...leftSidebarProps,
+            enableTouchPlacement: isTouch,
+          }}
+          playProps={{
+            playName,
+            notes,
+            onPlayNameChange: setPlayName,
+            onNotesChange: setNotes,
+            onSavePlay: handleSavePlay,
+            onSharePlay: handleOpenSharePlay,
+            onExportVideo: handleOpenExportVideo,
+            onAnimate: handleToolbarAnimate,
+            canSave: fieldPlayers.length > 0,
+            isSharing,
+            isExportingVideo,
+            exportVideoProgress,
+            canExportVideo: arrows.length > 0,
+            isPremium,
+          }}
+        />
       )}
 
       {!isPresentationMode && (
-        <PlaybookRightSidebar
-          user={user}
-          profile={profile}
-          isPremium={isPremium}
-          onSignOut={handleSignOut}
-          playName={playName}
-          activePlayId={activePlayId}
-          playCategory={playCategory}
-          attackCustomSwatches={attackCustomSwatches}
-          defenceCustomSwatches={defenceCustomSwatches}
-          notes={notes}
-          onPlayNameChange={setPlayName}
-          onPlayCategoryChange={setPlayCategory}
-          onAttackCustomColor={handleAttackCustomColor}
-          onDefenceCustomColor={handleDefenceCustomColor}
-          onNotesChange={setNotes}
-          fieldPlayers={fieldPlayers}
-          teamColors={teamColors}
-          savedPlays={savedPlays}
-          cloudSavedPlays={cloudSavedPlays}
-          onTeamColorChange={handleTeamColorChange}
-          onSavePlay={handleSavePlay}
-          onLoadPlay={handleLoadPlay}
-          onDeletePlay={handleDeletePlay}
-          onDuplicatePlay={handleDuplicatePlay}
-          onExportPDF={handleExportPDF}
-          onExportVideo={handleOpenExportVideo}
-          onSharePlay={handleOpenSharePlay}
-          isSharing={isSharing}
-          isExportingVideo={isExportingVideo}
-          exportVideoProgress={exportVideoProgress}
-          canExportVideo={arrows.length > 0 && !isPresentationMode}
-          onGenerateNotes={handleGenerateNotes}
-          onUpgrade={() => void handleUpgrade('monthly')}
-        />
+        <div className="hidden w-[220px] shrink-0 lg:flex">
+          <PlaybookRightSidebar {...rightSidebarProps} />
+        </div>
+      )}
+
+      {!isPresentationMode && isTabletLandscape && (
+        <div
+          className={`relative hidden shrink-0 transition-all duration-300 md:flex lg:hidden ${
+            rightPanelOpen ? "w-[180px]" : "w-0 overflow-hidden"
+          }`}
+        >
+          <div className="h-full w-[180px] shrink-0">
+            <PlaybookRightSidebar {...rightSidebarProps} variant="embedded" />
+          </div>
+          <button
+            type="button"
+            className="absolute -left-3 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-[#2a2a2a] bg-[#161616] text-[#aaa] hover:text-white"
+            style={{ borderWidth: "0.5px" }}
+            onClick={() => setRightPanelOpen((o) => !o)}
+            aria-label={rightPanelOpen ? "Collapse right panel" : "Expand right panel"}
+          >
+            {rightPanelOpen ? (
+              <ChevronRight className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronLeft className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
       )}
       {shareUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

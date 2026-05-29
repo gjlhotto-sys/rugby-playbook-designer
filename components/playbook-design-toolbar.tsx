@@ -49,6 +49,9 @@ interface PlaybookDesignToolbarProps {
   onToggleLayer: (key: LayerToggleKey) => void
   onResetLayers: () => void
   onArrowOpacityChange: (opacity: number) => void
+  isTouch?: boolean
+  compactPortrait?: boolean
+  isMobile?: boolean
 }
 
 export function PlaybookDesignToolbar({
@@ -73,6 +76,9 @@ export function PlaybookDesignToolbar({
   onToggleLayer,
   onResetLayers,
   onArrowOpacityChange,
+  isTouch = false,
+  compactPortrait = false,
+  isMobile = false,
 }: PlaybookDesignToolbarProps) {
   const zoneButtons: {
     id: FieldZone
@@ -113,7 +119,9 @@ export function PlaybookDesignToolbar({
 
   return (
     <div
-      className="flex shrink-0 flex-wrap items-center gap-3 border-b border-[#2a2a2a] bg-[#161616] px-3.5 py-2"
+      className={`flex shrink-0 flex-wrap items-center gap-3 border-b border-[#2a2a2a] bg-[#161616] px-3.5 py-2 ${
+        compactPortrait ? 'flex-col items-stretch' : ''
+      }`}
       style={{ borderBottomWidth: '0.5px' }}
     >
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -132,14 +140,18 @@ export function PlaybookDesignToolbar({
               key={id}
               type="button"
               onClick={() => onToolbarToolChange(id)}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+              className={`flex items-center gap-1 rounded-md font-medium transition-colors md:max-lg:min-h-10 md:max-lg:px-3 md:max-lg:py-2 ${
+                compactPortrait || isMobile
+                  ? 'min-h-10 px-3 py-2 text-[11px]'
+                  : 'px-2.5 py-1.5 text-[11px]'
+              } ${
                 toolbarTool === id
                   ? 'bg-[#C0392B] text-white'
                   : 'text-[#888] hover:text-[#ccc]'
               }`}
             >
-              <Icon className="h-3.5 w-3.5" strokeWidth={2} />
-              {label}
+              <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              <span className={isMobile ? 'sr-only' : undefined}>{label}</span>
             </button>
           ))}
         </div>
@@ -158,7 +170,11 @@ export function PlaybookDesignToolbar({
                 key={id}
                 type="button"
                 onClick={() => onZoneChange(id)}
-                className={`flex items-center gap-1 rounded-md px-2 py-1.5 text-[10px] font-medium transition-colors ${
+                className={`flex items-center gap-1 rounded-md font-medium transition-colors md:max-lg:min-h-10 md:max-lg:px-3 md:max-lg:py-2 ${
+                  compactPortrait || isMobile
+                    ? 'min-h-10 px-3 py-2 text-[10px]'
+                    : 'px-2 py-1.5 text-[10px]'
+                } ${
                   isActive
                     ? 'border border-[#2563eb] bg-[#1a2a3a] text-[#93c5fd]'
                     : 'border border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-[#ccc]'
@@ -167,7 +183,9 @@ export function PlaybookDesignToolbar({
                 title={label}
               >
                 <Icon className="h-3 w-3 shrink-0" strokeWidth={2} />
-                <span className="hidden sm:inline">{label}</span>
+                <span className={compactPortrait ? 'sr-only' : 'hidden sm:inline'}>
+                  {label}
+                </span>
               </button>
             )
           })}
@@ -182,17 +200,22 @@ export function PlaybookDesignToolbar({
         <button
           type="button"
           onClick={onClearField}
-          className="flex shrink-0 items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#1f1f1f] px-2.5 py-1.5 text-[11px] font-medium text-[#f87171] transition-colors hover:bg-[#2a1a1a]"
+          className={`flex shrink-0 items-center gap-1 rounded-md border border-[#2a2a2a] bg-[#1f1f1f] font-medium text-[#f87171] transition-colors hover:bg-[#2a1a1a] md:max-lg:min-h-10 md:max-lg:px-3 md:max-lg:py-2 ${
+            compactPortrait || isMobile
+              ? 'min-h-10 px-3 py-2 text-[11px]'
+              : 'px-2.5 py-1.5 text-[11px]'
+          }`}
           style={{ borderWidth: '0.5px' }}
         >
-          <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-          Clear Field
+          <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+          <span className={isMobile ? 'sr-only' : undefined}>Clear Field</span>
         </button>
 
-        {toolbarTool === 'draw' ? (
+        {toolbarTool === 'draw' && !compactPortrait ? (
           <>
             <div className="flex flex-wrap gap-1">
               {ARROW_TYPES.map((at) => {
+                if (isTouch && at.type === 'freedraw') return null
                 const isRuck = at.type === 'ruck'
                 const isReposition = at.type === 'reposition'
                 const isFreeDraw = at.type === 'freedraw'
@@ -256,7 +279,11 @@ export function PlaybookDesignToolbar({
         ) : null}
       </div>
 
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div
+        className={`ml-auto flex shrink-0 items-center gap-2 ${
+          compactPortrait ? 'hidden' : ''
+        }`}
+      >
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -318,40 +345,72 @@ export function PlaybookDesignToolbar({
           ) : null}
         </div>
 
-        <button
-          type="button"
-          onClick={onAnimate}
-          disabled={!canAnimate}
-          className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-40 ${
-            isAnimating
-              ? 'border-[#f59e0b] bg-[#2a1f0a] text-[#fcd34d]'
-              : 'border-[#16a34a] bg-[#1a2a1a] text-[#86efac]'
-          }`}
-          style={{ borderWidth: '0.5px' }}
-        >
-          {isAnimating ? (
-            <>
-              <Pause className="h-3.5 w-3.5 fill-current" />
-              Pause
-            </>
-          ) : (
-            <>
-              <Play className="h-3.5 w-3.5 fill-current" />
-              Animate
-            </>
-          )}
-        </button>
+        {!compactPortrait ? (
+          <>
+            <button
+              type="button"
+              onClick={onAnimate}
+              disabled={!canAnimate}
+              className={`flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[11px] font-semibold transition-opacity disabled:cursor-not-allowed disabled:opacity-40 md:max-lg:min-h-10 md:max-lg:px-3 md:max-lg:py-2 ${
+                isAnimating
+                  ? 'border-[#f59e0b] bg-[#2a1f0a] text-[#fcd34d]'
+                  : 'border-[#16a34a] bg-[#1a2a1a] text-[#86efac]'
+              }`}
+              style={{ borderWidth: '0.5px' }}
+            >
+              {isAnimating ? (
+                <>
+                  <Pause className="h-3.5 w-3.5 fill-current" />
+                  Pause
+                </>
+              ) : (
+                <>
+                  <Play className="h-3.5 w-3.5 fill-current" />
+                  Animate
+                </>
+              )}
+            </button>
 
-        <button
-          type="button"
-          onClick={onPresent}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-white"
-          style={{ borderWidth: '0.5px' }}
-          aria-label="Present fullscreen"
-        >
-          <Maximize2 className="h-4 w-4" />
-        </button>
+            <button
+              type="button"
+              onClick={onPresent}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-[#2a2a2a] bg-[#1f1f1f] text-[#888] hover:text-white md:max-lg:min-h-10 md:max-lg:min-w-10"
+              style={{ borderWidth: '0.5px' }}
+              aria-label="Present fullscreen"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
+          </>
+        ) : null}
       </div>
+
+      {compactPortrait ? (
+        <div className="flex w-full shrink-0 items-center gap-2 border-t border-[#2a2a2a] pt-2 md:max-lg:min-h-10">
+          <button
+            type="button"
+            onClick={onAnimate}
+            disabled={!canAnimate}
+            className={`flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-semibold disabled:opacity-40 ${
+              isAnimating
+                ? 'border-[#f59e0b] bg-[#2a1f0a] text-[#fcd34d]'
+                : 'border-[#16a34a] bg-[#1a2a1a] text-[#86efac]'
+            }`}
+            style={{ borderWidth: '0.5px' }}
+          >
+            {isAnimating ? (
+              <>
+                <Pause className="h-3.5 w-3.5 fill-current" />
+                Pause
+              </>
+            ) : (
+              <>
+                <Play className="h-3.5 w-3.5 fill-current" />
+                Animate
+              </>
+            )}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

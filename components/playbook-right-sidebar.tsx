@@ -152,6 +152,7 @@ interface PlaybookRightSidebarProps {
   onGenerateNotes: () => void
   onSignOut: () => void
   onUpgrade?: () => void
+  variant?: 'desktop' | 'embedded'
 }
 
 export function PlaybookRightSidebar({
@@ -188,18 +189,19 @@ export function PlaybookRightSidebar({
   onGenerateNotes,
   onSignOut,
   onUpgrade,
+  variant = 'desktop',
 }: PlaybookRightSidebarProps) {
   const router = useRouter()
   const hasContent = fieldPlayers.length > 0
   const allPlays = [...savedPlays, ...cloudSavedPlays]
   const showUpgradeBanner = profile?.role === 'coach'
 
-  return (
-    <aside
-      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-l border-[#2a2a2a] bg-[#161616] lg:flex"
-      style={{ borderLeftWidth: '0.5px' }}
-    >
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+  const inner = (
+    <>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {showUpgradeBanner && (
           <div
             className="mb-2 rounded-lg border border-[#f59e0b] bg-[#1a1a0a] px-3 py-2"
@@ -455,6 +457,25 @@ export function PlaybookRightSidebar({
           Sign out
         </button>
       </div>
+    </>
+  )
+
+  if (variant === 'embedded') {
+    return (
+      <div className="flex h-full w-full flex-col overflow-hidden border-l border-[#2a2a2a] bg-[#161616]"
+        style={{ borderLeftWidth: '0.5px' }}
+      >
+        {inner}
+      </div>
+    )
+  }
+
+  return (
+    <aside
+      className="hidden h-full w-[220px] shrink-0 flex-col overflow-hidden border-l border-[#2a2a2a] bg-[#161616] lg:flex"
+      style={{ borderLeftWidth: '0.5px' }}
+    >
+      {inner}
     </aside>
   )
 }

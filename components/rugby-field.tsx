@@ -28,6 +28,7 @@ import {
   filterVisibleArrows,
   type LayerVisibility,
 } from "@/lib/layer-visibility"
+import { touchToMouseLike } from "@/lib/touch-pointer"
 
 export interface RugbyFieldHandle {
   play: () => void
@@ -128,6 +129,9 @@ interface RugbyFieldProps {
   arrowColor?: string
   onFreeDrawArrowAdd?: (arrow: Arrow) => void
   onFreeDrawStarted?: () => void
+  /** Extra scale for mobile field tokens (e.g. 0.85) */
+  mobileTokenScale?: number
+  onPlayerLongPress?: (playerId: string, clientX: number, clientY: number) => void
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -204,8 +208,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   arrowColor = "#2563eb",
   onFreeDrawArrowAdd,
   onFreeDrawStarted,
+  mobileTokenScale = 1,
+  onPlayerLongPress,
 }: RugbyFieldProps, ref) {
-  const tokenScale = fieldZone === "full" ? 1 : 0.5
+  const tokenScale =
+    (fieldZone === "full" ? 1 : 0.5) * mobileTokenScale
   const isZoneFocus = fieldZone !== "full"
   const baseTokenRadius = 1.6
   const basePassHighlightRadius = 2.2
@@ -955,6 +962,31 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
     onFieldClick(x, y)
   }, [getCanvasCoordinates, onFieldClick, mode, selectedArrowId, onArrowSelect, onTextLabelCreate, arrowType, passerSelected, onPasserSelect, selectedPlayerId, arrows, eraseMode, selectionToolActive, clickToPlaceActive, onPlayerSelect, onBallSelect])
 
+  const handleFieldTouchEnd = useCallback(
+    (e: React.TouchEvent<SVGSVGElement>) => {
+      if (e.changedTouches.length !== 1) return
+      // Prevent the ghost click that the browser fires after touchend —
+      // otherwise handleFieldClick runs once here and again from onClick.
+      e.preventDefault()
+      const touch = e.changedTouches[0]
+      const target = e.target as SVGElement
+      if (
+        target.closest(".player-token") ||
+        target.closest(".ball-token") ||
+        target.closest(".phase-token") ||
+        target.closest(".cone-token") ||
+        target.closest(".label-token") ||
+        target.closest(".ruck-marker") ||
+        target.closest(".arrow-path") ||
+        target.closest(".arrow-handle")
+      ) {
+        return
+      }
+      handleFieldClick(touchToMouseLike(touch, e.target))
+    },
+    [handleFieldClick]
+  )
+
   const tryCreatePassToPoint = useCallback((toX: number, toY: number, receiverIdForArrow: string) => {
     if (!(mode === "draw" && arrowType === "pass" && passerSelected)) return false
     const passer = players.find((p) =>
@@ -1276,7 +1308,36 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
           )
         }
 
-        const handleMouseUp = () => {
+        const handleTouchMove = (moveEvent: TouchEvent) => {
+          if (moveEvent.touches.length !== 1) return
+          const t = moveEvent.touches[0]
+          if (
+            !didDrag &&
+            Math.hypot(t.clientX - startClientX, t.clientY - startClientY) > 4
+          ) {
+            didDrag = true
+            onPlayerDragStart(player.id)
+            draggingRef.current = {
+              type: "player",
+              id: player.id,
+              offsetX: x - player.x,
+              offsetY: y - player.y,
+            }
+          }
+          if (!didDrag || !draggingRef.current || draggingRef.current.type !== "player") {
+            return
+          }
+          const pt = pointerToSvg(t.clientX, t.clientY)
+          const newX = pt.x - draggingRef.current.offsetX
+          const newY = pt.y - draggingRef.current.offsetY
+          onPlayerDrag(
+            draggingRef.current.id,
+            Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
+            Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, newY))
+          )
+        }
+
+        const endDrag = () => {
           if (!didDrag) {
             onPlayerSelect(player.id)
           } else {
@@ -1284,11 +1345,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             onPlayerDragEnd()
           }
           window.removeEventListener("mousemove", handleMouseMove)
-          window.removeEventListener("mouseup", handleMouseUp)
+          window.removeEventListener("mouseup", endDrag)
+          window.removeEventListener("touchmove", handleTouchMove)
+          window.removeEventListener("touchend", endDrag)
+          window.removeEventListener("touchcancel", endDrag)
         }
 
         window.addEventListener("mousemove", handleMouseMove)
-        window.addEventListener("mouseup", handleMouseUp)
+        window.addEventListener("mouseup", endDrag)
+        window.addEventListener("touchmove", handleTouchMove, { passive: false })
+        window.addEventListener("touchend", endDrag)
+        window.addEventListener("touchcancel", endDrag)
         return
       }
 
@@ -1316,17 +1383,70 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         )
       }
 
-      const handleMouseUp = () => {
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        if (moveEvent.touches.length !== 1) return
+        if (!draggingRef.current || draggingRef.current.type !== "player" || !svgRef.current) {
+          return
+        }
+        const t = moveEvent.touches[0]
+        const pt = pointerToSvg(t.clientX, t.clientY)
+        const newX = pt.x - draggingRef.current.offsetX
+        const newY = pt.y - draggingRef.current.offsetY
+        onPlayerDrag(
+          draggingRef.current.id,
+          Math.max(1.5, Math.min(CANVAS_WIDTH - 1.5, newX)),
+          Math.max(1.5, Math.min(CANVAS_HEIGHT - 1.5, newY))
+        )
+      }
+
+      const endDrag = () => {
         draggingRef.current = null
         onPlayerDragEnd()
         window.removeEventListener("mousemove", handleMouseMove)
-        window.removeEventListener("mouseup", handleMouseUp)
+        window.removeEventListener("mouseup", endDrag)
+        window.removeEventListener("touchmove", handleTouchMove)
+        window.removeEventListener("touchend", endDrag)
+        window.removeEventListener("touchcancel", endDrag)
       }
 
       window.addEventListener("mousemove", handleMouseMove)
-      window.addEventListener("mouseup", handleMouseUp)
+      window.addEventListener("mouseup", endDrag)
+      window.addEventListener("touchmove", handleTouchMove, { passive: false })
+      window.addEventListener("touchend", endDrag)
+      window.addEventListener("touchcancel", endDrag)
     }
   }, [getCanvasCoordinates, onPlayerDrag, onPlayerDragStart, onPlayerDragEnd, mode, eraseMode, onDeletePlayer, selectedPlayerId, onPlayerSelect, onBallSelect, onArrowSelect, arrowType, passerSelected, onPasserSelect, onCreatePassArrow, players, arrows, selectionToolActive, pointerToSvg, freeDrawSourcePlayerId, startFreeDrawSession, onToggleRuckPlayer, onToggleRepositionPlayer, repositionAssignmentMode])
+
+  const handlePlayerTouchStart = useCallback(
+    (e: React.TouchEvent, player: FieldPlayer) => {
+      if (e.touches.length !== 1) return
+      // Prevent the synthetic mouse/click events that the browser fires
+      // after a touch — otherwise handlePlayerMouseDown runs twice and the
+      // pass flow skips the "select source" step.
+      e.preventDefault()
+      e.stopPropagation()
+      const touch = e.touches[0]
+      let longPressTimer: ReturnType<typeof setTimeout> | null = null
+      if (selectionToolActive && mode === "move" && onPlayerLongPress) {
+        longPressTimer = setTimeout(() => {
+          onPlayerLongPress(player.id, touch.clientX, touch.clientY)
+          onPlayerSelect(player.id)
+        }, 500)
+      }
+      const clearLongPress = () => {
+        if (longPressTimer) clearTimeout(longPressTimer)
+      }
+      const onTouchEndOnce = () => {
+        clearLongPress()
+        window.removeEventListener("touchend", onTouchEndOnce)
+        window.removeEventListener("touchcancel", onTouchEndOnce)
+      }
+      window.addEventListener("touchend", onTouchEndOnce)
+      window.addEventListener("touchcancel", onTouchEndOnce)
+      handlePlayerMouseDown(touchToMouseLike(touch, e.currentTarget), player)
+    },
+    [handlePlayerMouseDown, selectionToolActive, mode, onPlayerLongPress, onPlayerSelect]
+  )
 
   useEffect(() => {
     const pending = pendingPassSnapRef.current
@@ -2202,12 +2322,14 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             ? { width: "100%", height: "100%" }
             : { height: `${zoom}%`, maxHeight: "100%" }),
           transition: "opacity 0.2s ease",
+          touchAction: "none",
         }}
         preserveAspectRatio={isZoneFocus ? "none" : "xMidYMid meet"}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onMouseDownCapture={handlePassCanvasMouseDownCapture}
         onClick={handleFieldClick}
+        onTouchEnd={handleFieldTouchEnd}
       >
         {/* Buffer zone background (darker green) */}
         <rect x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} fill="#14532d" />
@@ -2498,6 +2620,7 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
             }`}
             transform={`translate(${renderPos.x}, ${renderPos.y})`}
             onMouseDown={(e) => handlePlayerMouseDown(e, player)}
+            onTouchStart={(e) => handlePlayerTouchStart(e, player)}
             onMouseEnter={() => {
               if (mode === "draw" && arrowType === "pass" && passerSelected) {
                 const passer = players.find((p) =>
