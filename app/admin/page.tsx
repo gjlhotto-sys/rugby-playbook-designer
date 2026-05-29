@@ -94,16 +94,35 @@ export default function AdminPage() {
 
   const updateRole = async (userId: string, newRole: string) => {
     setUpdatingId(userId)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', userId)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
-    if (!error) {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
-      )
-      await loadUsers()
+      const response = await fetch('/api/admin/update-role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          role: newRole,
+          adminUserId: session?.user?.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+        )
+        await loadUsers()
+      } else {
+        console.error('Failed to update role:', data.error)
+        alert('Failed to update role. Please try again.')
+      }
+    } catch (error) {
+      console.error('Role change error:', error)
+      alert('Failed to update role. Please try again.')
     }
     setUpdatingId(null)
   }
