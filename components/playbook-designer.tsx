@@ -28,6 +28,8 @@ import {
 import type { SidebarTouchPlacementPayload } from "./playbook-left-sidebar"
 import type { FieldPlayer, Arrow, InteractionMode, TeamColors, UndoAction, SavedPlay, PlayType, ArrowType, BallToken, PhaseMarker, ConeMarker, TextLabel, PhaseSnapshot, RuckMarker } from "@/lib/types"
 import { RUGBY_POSITIONS } from "@/lib/types"
+import { NETBALL_POSITIONS, NETBALL_POSITION_NOTES } from "@/lib/netball-positions"
+import { useSport, type Sport } from "@/lib/sport-context"
 import type { PlayCategory } from "@/lib/play-metadata"
 import {
   legacyPlayTypeToPlayCategory,
@@ -80,6 +82,9 @@ interface PlaybookDesignerProps {
 
 export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps) {
   const router = useRouter()
+  const { sport, setSport } = useSport()
+  const isNetball = sport === "netball"
+  const positions = isNetball ? NETBALL_POSITIONS : RUGBY_POSITIONS
   const [fieldPlayers, setFieldPlayers] = useState<FieldPlayer[]>([])
   const [arrows, setArrows] = useState<Arrow[]>([])
   const [ball, setBall] = useState<BallToken | null>(null)
@@ -325,10 +330,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   }, [zoom])
 
   useEffect(() => {
-    document.title = playName
-      ? `PlayForge — ${playName}`
-      : 'PlayForge'
-  }, [playName])
+    if (playName) {
+      document.title = `PlayForge — ${playName}`
+    } else {
+      document.title = isNetball ? 'PlayForge — Netball' : 'PlayForge'
+    }
+  }, [playName, isNetball])
 
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
@@ -484,7 +491,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   )
 
   const makePlayerAt = useCallback((team: "attack" | "defense", number: number, x: number, y: number): FieldPlayer => {
-    const positionData = RUGBY_POSITIONS.find(p => p.number === number)
+    const positionData = positions.find(p => p.number === number)
     return {
       id: `${team}-${number}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       number,
@@ -494,7 +501,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       x,
       y,
     }
-  }, [])
+  }, [positions])
 
   const applyFormationBatch = useCallback((placements: Array<{ team: "attack" | "defense"; number: number; xPercent: number; yPercent: number }>) => {
     const existingKeys = new Set(fieldPlayers.map(getExistingPlayerKey))
@@ -710,7 +717,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   const handlePlayerDrop = useCallback((playerId: string, x: number, y: number) => {
     const [team, numberStr] = playerId.split("-")
     const number = parseInt(numberStr, 10)
-    const positionData = RUGBY_POSITIONS.find(p => p.number === number)
+    const positionData = positions.find(p => p.number === number)
 
     const newPlayer: FieldPlayer = {
       id: playerId,
@@ -726,7 +733,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     setUndoStack(prev => [...prev, { type: "add_player", player: newPlayer }])
     setSelectedPlayerId(null)
     setSelectedBall(false)
-  }, [])
+  }, [positions])
 
   const handleBallDrop = useCallback((x: number, y: number) => {
     if (ball) return // Only one ball allowed
@@ -1359,6 +1366,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       labels: currentSnap.labels,
       team_colors: teamColors,
       ruck_markers: currentSnap.ruckMarkers,
+      sport,
     }
   }, [
     activeFormation,
@@ -1371,6 +1379,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     playType,
     savedPlays,
     teamColors,
+    sport,
   ])
 
   const handleSavePlay = useCallback(async () => {
@@ -1416,6 +1425,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           ruckMarkers: currentSnap.ruckMarkers,
           phaseSnapshots: allPhaseSnapshots,
           currentPhase: currentPhaseView,
+          sport,
         }
       : {
           id: `play-${Date.now()}`,
@@ -1435,6 +1445,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           ruckMarkers: currentSnap.ruckMarkers,
           phaseSnapshots: allPhaseSnapshots,
           currentPhase: currentPhaseView,
+          sport,
         }
 
     setPhaseSnapshots(allPhaseSnapshots)
@@ -1489,10 +1500,12 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     user?.id,
     cloudSavedPlays,
     activePlayId,
+    sport,
   ])
 
   const handleLoadPlay = useCallback(
     (play: SavedPlay) => {
+      setSport(play.sport ?? "rugby")
       setPlayName(play.name)
       setPlayCategory(
         play.playCategory ?? legacyPlayTypeToPlayCategory(play.playType)
@@ -1539,7 +1552,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
       setLayerVisibility(DEFAULT_LAYER_VISIBILITY)
       preAnimationVisibilityRef.current = null
     },
-    [applyCanvasSnapshot]
+    [applyCanvasSnapshot, setSport]
   )
 
   const resetToBlankPlay = useCallback(() => {
@@ -1571,6 +1584,27 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     preAnimationVisibilityRef.current = null
     fieldRef.current?.reset()
   }, [])
+
+  const handleSportChange = useCallback(
+    (newSport: Sport) => {
+      if (newSport === sport) return
+      const hasContent =
+        fieldPlayers.length > 0 ||
+        arrows.length > 0 ||
+        ball != null ||
+        cones.length > 0 ||
+        phases.length > 0
+      if (
+        hasContent &&
+        !window.confirm("Switching sport will clear the field. Continue?")
+      ) {
+        return
+      }
+      resetToBlankPlay()
+      setSport(newSport)
+    },
+    [sport, fieldPlayers.length, arrows.length, ball, cones.length, phases.length, resetToBlankPlay, setSport]
+  )
 
   const handleDeletePlay = useCallback(
     async (playId: string) => {
@@ -2418,8 +2452,10 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   }, [])
 
   const leftSidebarProps = {
-    attackPlayers: RUGBY_POSITIONS,
-    defensePlayers: RUGBY_POSITIONS,
+    sport,
+    onSportChange: handleSportChange,
+    attackPlayers: positions,
+    defensePlayers: positions,
     fieldPlayers,
     selectedPlacementToken,
     onSelectPlacementToken: setSelectedPlacementToken,
@@ -2455,6 +2491,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
   }
 
   const rightSidebarProps = {
+    sport,
     user,
     profile,
     isPremium,
@@ -2568,6 +2605,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
             isTouch={isTouch}
             compactPortrait={showMobileDrawer}
             isMobile={isMobile}
+            sport={sport}
           />
         )}
 
@@ -2670,6 +2708,7 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
           >
             <RugbyField
             ref={fieldRef}
+            sport={sport}
             players={fieldPlayers}
             arrows={arrows}
             ball={ball}
@@ -2803,6 +2842,11 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
               onClose={() => setSelectedPlayerId(null)}
               onRemove={() => handleDeletePlayer(selectedPlayer.id)}
               position={selectionPopoverPos}
+              note={
+                isNetball
+                  ? NETBALL_POSITION_NOTES[selectedPlayer.abbr]
+                  : undefined
+              }
             />
           ) : null}
           {toolbarTool === "select" &&

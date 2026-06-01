@@ -59,11 +59,16 @@ export default function PlayViewPage() {
     })
   }, [shareId])
 
+  const sportEmoji = play?.sport === 'netball' ? '🏐' : '🏉'
+
   const handleShare = useCallback(async () => {
     if (navigator.share) {
       await navigator.share({
         title: play?.name || 'PlayForge Play',
-        text: 'Check out this rugby play',
+        text:
+          play?.sport === 'netball'
+            ? 'Check out this netball play'
+            : 'Check out this rugby play',
         url: window.location.href,
       })
     } else {
@@ -117,6 +122,7 @@ export default function PlayViewPage() {
     zoom: 100,
     hideControls: true,
     animationSpeed: speed,
+    sport: play.sport ?? 'rugby',
     onFieldClick: () => {},
     onPlayerDrop: () => {},
     onBallDrop: () => {},
@@ -265,7 +271,7 @@ export default function PlayViewPage() {
         }`}
       >
         <div className="flex items-center gap-2">
-          <span className="text-lg">🏉</span>
+          <span className="text-lg">{sportEmoji}</span>
           <div>
             <h1 className="text-sm font-bold leading-tight text-white">
               {play.name || 'Untitled Play'}

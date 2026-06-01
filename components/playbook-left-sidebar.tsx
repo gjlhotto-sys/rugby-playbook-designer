@@ -13,6 +13,8 @@ import type { PlayerTemplate, FieldPlayer } from '@/lib/types'
 import type { FormationId } from '@/lib/play-metadata'
 import { formatFormationOptionLabel, type SavedFormation } from '@/lib/saved-formations'
 import type { SidebarPlacementToken } from './playbook-sidebar'
+import type { Sport } from '@/lib/sport-context'
+import { SportSwitcher } from './sport-switcher'
 
 export type { FormationId }
 
@@ -149,6 +151,8 @@ export interface PlaybookLeftSidebarProps {
   tokenSize?: number
   enableTouchPlacement?: boolean
   onTouchPlacementDrag?: (payload: SidebarTouchPlacementPayload | null) => void
+  sport?: Sport
+  onSportChange?: (sport: Sport) => void
 }
 
 const FORMATIONS: { id: FormationId; label: string }[] = [
@@ -191,7 +195,10 @@ export function PlaybookLeftSidebar({
   tokenSize = 26,
   enableTouchPlacement = false,
   onTouchPlacementDrag,
+  sport = 'rugby',
+  onSportChange,
 }: PlaybookLeftSidebarProps) {
+  const isNetball = sport === 'netball'
   const attackOnField = fieldPlayers.filter((p) => p.team === 'attack').length
   const defenseOnField = fieldPlayers.filter((p) => p.team === 'defense').length
   const canSaveFormation = fieldPlayers.length > 0
@@ -240,6 +247,17 @@ export function PlaybookLeftSidebar({
               </p>
             </div>
           </div>
+          {onSportChange ? (
+            <div className="mt-2.5">
+              <SportSwitcher sport={sport} onSportChange={onSportChange} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {variant === 'embedded' && onSportChange ? (
+        <div className="px-3 pt-3">
+          <SportSwitcher sport={sport} onSportChange={onSportChange} />
         </div>
       ) : null}
 
@@ -253,7 +271,7 @@ export function PlaybookLeftSidebar({
           Formation
         </p>
         <div className="mb-4 grid grid-cols-2 gap-1.5">
-          {FORMATIONS.map((f) => (
+          {FORMATIONS.filter((f) => !isNetball || f.id === 'free-play').map((f) => (
             <button
               key={f.id}
               type="button"
@@ -331,12 +349,16 @@ export function PlaybookLeftSidebar({
           <>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-[10px] font-semibold text-[#60a5fa]">ATTACK</p>
-          <span className="text-[9px] text-[#555]">{attackOnField}/15</span>
+          <span className="text-[9px] text-[#555]">
+            {attackOnField}/{isNetball ? 7 : 15}
+          </span>
         </div>
-        <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        {!isNetball ? (
+          <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        ) : null}
         <div className="mb-2 flex flex-wrap gap-[3px]">
           {attackPlayers
-            .filter((p) => p.number <= 8)
+            .filter((p) => (isNetball ? true : p.number <= 8))
             .map((player) => (
               <PlayerToken
                 key={`a-${player.number}`}
@@ -362,8 +384,10 @@ export function PlaybookLeftSidebar({
               />
             ))}
         </div>
-        <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
-        <div className="mb-3 flex flex-wrap gap-[3px]">
+        {!isNetball ? (
+          <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
+        ) : null}
+        <div className={`${isNetball ? 'hidden' : 'mb-3'} flex flex-wrap gap-[3px]`}>
           {attackPlayers
             .filter((p) => p.number > 8)
             .map((player) => (
@@ -399,12 +423,16 @@ export function PlaybookLeftSidebar({
 
         <div className="mb-2 flex items-center justify-between">
           <p className="text-[10px] font-semibold text-[#f87171]">DEFENCE</p>
-          <span className="text-[9px] text-[#555]">{defenseOnField}/15</span>
+          <span className="text-[9px] text-[#555]">
+            {defenseOnField}/{isNetball ? 7 : 15}
+          </span>
         </div>
-        <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        {!isNetball ? (
+          <p className="mb-1 text-[8px] uppercase text-[#555]">Forwards</p>
+        ) : null}
         <div className="mb-2 flex flex-wrap gap-[3px]">
           {defensePlayers
-            .filter((p) => p.number <= 8)
+            .filter((p) => (isNetball ? true : p.number <= 8))
             .map((player) => (
               <PlayerToken
                 key={`d-${player.number}`}
@@ -430,8 +458,10 @@ export function PlaybookLeftSidebar({
               />
             ))}
         </div>
-        <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
-        <div className="mb-4 flex flex-wrap gap-[3px]">
+        {!isNetball ? (
+          <p className="mb-1 text-[8px] uppercase text-[#555]">Backs</p>
+        ) : null}
+        <div className={`${isNetball ? 'hidden' : 'mb-4'} flex flex-wrap gap-[3px]`}>
           {defensePlayers
             .filter((p) => p.number > 8)
             .map((player) => (

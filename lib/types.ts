@@ -1,4 +1,5 @@
 import type { FormationId, PlayCategory } from './play-metadata'
+import type { Sport } from './sport-context'
 
 export interface PlayerTemplate {
   number: number
@@ -121,6 +122,8 @@ export interface SavedPlay {
   ruckMarkers?: RuckMarker[]
   phaseSnapshots?: Record<number, PhaseSnapshot>
   currentPhase?: number
+  /** Sport this play belongs to. Defaults to 'rugby' for backwards compatibility. */
+  sport?: Sport
 }
 
 export type UndoAction =

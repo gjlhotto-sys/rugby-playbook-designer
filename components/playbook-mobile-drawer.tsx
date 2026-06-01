@@ -140,6 +140,8 @@ export function PlaybookMobileDrawer({
                 <div className="flex flex-wrap gap-1">
                   {ARROW_TYPES.map((at) => {
                     if (isTouch && at.type === 'freedraw') return null
+                    if (leftSidebarProps.sport === 'netball' && at.type === 'ruck')
+                      return null
                     const isRuck = at.type === 'ruck'
                     const isReposition = at.type === 'reposition'
                     const isFreeDraw = at.type === 'freedraw'

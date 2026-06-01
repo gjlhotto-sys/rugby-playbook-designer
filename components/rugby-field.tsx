@@ -29,6 +29,8 @@ import {
   type LayerVisibility,
 } from "@/lib/layer-visibility"
 import { touchToMouseLike } from "@/lib/touch-pointer"
+import type { Sport } from "@/lib/sport-context"
+import { NetballCourt } from "./netball-court"
 
 export interface RugbyFieldHandle {
   play: () => void
@@ -132,6 +134,8 @@ interface RugbyFieldProps {
   /** Extra scale for mobile field tokens (e.g. 0.85) */
   mobileTokenScale?: number
   onPlayerLongPress?: (playerId: string, clientX: number, clientY: number) => void
+  /** Sport to render — 'rugby' (default) or 'netball' */
+  sport?: Sport
 }
 
 export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function RugbyField({
@@ -210,7 +214,9 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   onFreeDrawStarted,
   mobileTokenScale = 1,
   onPlayerLongPress,
+  sport = "rugby",
 }: RugbyFieldProps, ref) {
+  const isNetball = sport === "netball"
   const tokenScale =
     (fieldZone === "full" ? 1 : 0.5) * mobileTokenScale
   const isZoneFocus = fieldZone !== "full"
@@ -2331,6 +2337,10 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         onClick={handleFieldClick}
         onTouchEnd={handleFieldTouchEnd}
       >
+        {isNetball ? (
+          <NetballCourt />
+        ) : (
+        <>
         {/* Buffer zone background (darker green) */}
         <rect x="0" y="0" width={CANVAS_WIDTH} height={CANVAS_HEIGHT} fill="#14532d" />
         
@@ -2425,6 +2435,8 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
         {/* In-goal area labels */}
         <text x={BUFFER + 35} y={BUFFER + 5.5} fontSize="2" fill="white" opacity="0.4" textAnchor="middle">IN-GOAL</text>
         <text x={BUFFER + 35} y={BUFFER + 106} fontSize="2" fill="white" opacity="0.4" textAnchor="middle">IN-GOAL</text>
+        </>
+        )}
 
         {/* Movement arrows */}
         {visibleArrows.map(renderArrow)}
@@ -2574,14 +2586,24 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
                 onMouseDown={handleBallMouseDown}
                 onContextMenu={(e) => handleContextMenu(e, "ball", "ball")}
               >
-                <ellipse
-                  rx={ballRx}
-                  ry={ballRy}
-                  fill="#EAB308"
-                  stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.3)"}
-                  strokeWidth={selectedBall ? 0.3 * tokenScale : 0.1 * tokenScale}
-                  className="transition-all"
-                />
+                {isNetball ? (
+                  <circle
+                    r={ballRx}
+                    fill="#f97316"
+                    stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.45)"}
+                    strokeWidth={selectedBall ? 0.3 * tokenScale : 0.12 * tokenScale}
+                    className="transition-all"
+                  />
+                ) : (
+                  <ellipse
+                    rx={ballRx}
+                    ry={ballRy}
+                    fill="#EAB308"
+                    stroke={selectedBall ? "#ffffff" : "rgba(0,0,0,0.3)"}
+                    strokeWidth={selectedBall ? 0.3 * tokenScale : 0.1 * tokenScale}
+                    className="transition-all"
+                  />
+                )}
                 <text
                   y={0.25 * tokenScale}
                   fontSize={ballFontSize}
@@ -2598,7 +2620,11 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
 
           return (
             <g className="pointer-events-none" transform={`translate(${ballRenderPos.x}, ${ballRenderPos.y})`}>
-              <ellipse rx={ballRx} ry={ballRy} fill="#EAB308" stroke="rgba(0,0,0,0.3)" strokeWidth={0.1 * tokenScale} />
+              {isNetball ? (
+                <circle r={ballRx} fill="#f97316" stroke="rgba(0,0,0,0.45)" strokeWidth={0.12 * tokenScale} />
+              ) : (
+                <ellipse rx={ballRx} ry={ballRy} fill="#EAB308" stroke="rgba(0,0,0,0.3)" strokeWidth={0.1 * tokenScale} />
+              )}
             </g>
           )
         })()}

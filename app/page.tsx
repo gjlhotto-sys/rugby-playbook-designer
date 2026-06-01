@@ -7,6 +7,7 @@ import { PlaybookDesigner } from '@/components/playbook-designer'
 import type { User } from '@supabase/supabase-js'
 import { getUserProfile } from '@/lib/auth'
 import type { UserProfile } from '@/lib/auth'
+import { SportProvider } from '@/lib/sport-context'
 
 export default function Home() {
   const router = useRouter()
@@ -99,5 +100,9 @@ export default function Home() {
 
   if (!user) return null
 
-  return <PlaybookDesigner user={user} profile={profile} />
+  return (
+    <SportProvider>
+      <PlaybookDesigner user={user} profile={profile} />
+    </SportProvider>
+  )
 }

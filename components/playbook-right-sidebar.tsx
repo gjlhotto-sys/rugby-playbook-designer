@@ -15,6 +15,7 @@ import {
 import type { User } from '@supabase/supabase-js'
 import type { UserProfile } from '@/lib/auth'
 import type { FieldPlayer, TeamColors, SavedPlay } from '@/lib/types'
+import type { Sport } from '@/lib/sport-context'
 import type { PlayCategory } from '@/lib/play-metadata'
 import {
   FORMATION_LABELS,
@@ -116,6 +117,7 @@ function PlayThumbnail({ play }: { play: SavedPlay }) {
 }
 
 interface PlaybookRightSidebarProps {
+  sport?: Sport
   user: User
   profile: UserProfile | null
   isPremium: boolean
@@ -156,6 +158,7 @@ interface PlaybookRightSidebarProps {
 }
 
 export function PlaybookRightSidebar({
+  sport = 'rugby',
   user,
   profile,
   isPremium,
@@ -239,7 +242,9 @@ export function PlaybookRightSidebar({
               }`}
               style={{ borderWidth: '0.5px' }}
             >
-              {chip.label}
+              {sport === 'netball' && chip.value === 'set-piece'
+                ? 'Centre Pass'
+                : chip.label}
             </button>
           ))}
         </div>
@@ -375,6 +380,9 @@ export function PlaybookRightSidebar({
                   <PlayThumbnail play={play} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[11px] font-medium text-white">
+                      <span className="mr-1" title={play.sport === 'netball' ? 'Netball' : 'Rugby'}>
+                        {play.sport === 'netball' ? '🏐' : '🏉'}
+                      </span>
                       {play.name}
                       {play.id.startsWith('cloud:') ? ' ☁' : ''}
                     </p>

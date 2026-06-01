@@ -14,6 +14,17 @@ import type {
 import { PLAY_TYPES } from './types'
 import type { FormationId, PlayCategory } from './play-metadata'
 import { legacyPlayTypeToPlayCategory, parseFormationId } from './play-metadata'
+import type { Sport } from './sport-context'
+
+/**
+ * Requires migration (run in Supabase SQL editor):
+ *   ALTER TABLE plays ADD COLUMN IF NOT EXISTS sport text DEFAULT 'rugby';
+ */
+const SPORT_COLUMN = 'sport'
+
+function parseSport(value: unknown): Sport {
+  return value === 'netball' ? 'netball' : 'rugby'
+}
 
 export interface SavePlayResult {
   id: string
@@ -36,6 +47,7 @@ export interface PlayData {
   labels: TextLabel[]
   team_colors: TeamColors
   ruck_markers?: RuckMarker[]
+  sport?: Sport
 }
 
 function isPlayType(value: string): value is PlayType {
@@ -82,6 +94,7 @@ function playRowToSavedPlay(row: Record<string, unknown>): SavedPlay | null {
     cones: (row.cones as ConeMarker[]) ?? [],
     labels: (row.labels as TextLabel[]) ?? [],
     ruckMarkers: parseRuckMarkers(row),
+    sport: parseSport(row.sport),
   }
 }
 
@@ -157,6 +170,7 @@ function buildPlayInsertRow(
     labels: playData.labels,
     team_colors: playData.team_colors,
     ruck_markers: playData.ruck_markers ?? [],
+    sport: playData.sport ?? 'rugby',
     user_id: userId,
   }
 
@@ -248,6 +262,17 @@ export async function savePlayToCloud(
       ;({ data, error } = await writePlayRow(payload, Boolean(existingId)))
     }
 
+    if (error && isMissingColumnError(error, SPORT_COLUMN)) {
+      console.warn(
+        "plays table missing sport column; retrying without it (run: ALTER TABLE plays ADD COLUMN IF NOT EXISTS sport text DEFAULT 'rugby')"
+      )
+      const payload = buildPlayInsertRow(playData, userId, true)
+      delete payload.sport
+      if (existingId) payload.id = existingId
+      else delete payload.id
+      ;({ data, error } = await writePlayRow(payload, Boolean(existingId)))
+    }
+
     if (
       error &&
       (isMissingColumnError(error, 'play_category') ||
@@ -325,6 +350,7 @@ export async function loadPlayFromCloud(shareId: string): Promise<PlayData | nul
     return {
       ...(row as unknown as PlayData),
       ruck_markers: parseRuckMarkers(row),
+      sport: parseSport(row.sport),
     }
   } catch (err) {
     console.error('Failed to load play:', err)

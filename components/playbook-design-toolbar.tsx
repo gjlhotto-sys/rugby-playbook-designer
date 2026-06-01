@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { ARROW_TYPES, type ArrowType } from '@/lib/types'
 import type { FieldZone } from '@/lib/field-zones'
+import type { Sport } from '@/lib/sport-context'
 import type { LayerToggleKey, LayerVisibility } from '@/lib/layer-visibility'
 import { PlaybookColorPickerPopover } from './playbook-color-picker-popover'
 import { PlaybookLayersPopover } from './playbook-layers-popover'
@@ -52,6 +53,7 @@ interface PlaybookDesignToolbarProps {
   isTouch?: boolean
   compactPortrait?: boolean
   isMobile?: boolean
+  sport?: Sport
 }
 
 export function PlaybookDesignToolbar({
@@ -79,17 +81,26 @@ export function PlaybookDesignToolbar({
   isTouch = false,
   compactPortrait = false,
   isMobile = false,
+  sport = 'rugby',
 }: PlaybookDesignToolbarProps) {
+  const isNetball = sport === 'netball'
   const zoneButtons: {
     id: FieldZone
     label: string
     icon: typeof Maximize2
-  }[] = [
-    { id: 'full', label: 'Full Field', icon: Maximize2 },
-    { id: 'attack', label: 'Attack Zone', icon: ArrowUp },
-    { id: 'mid', label: 'Mid Zone', icon: Rows3 },
-    { id: 'defence', label: 'Defence Zone', icon: Shield },
-  ]
+  }[] = isNetball
+    ? [
+        { id: 'full', label: 'Full Court', icon: Maximize2 },
+        { id: 'attack', label: 'Attacking Third', icon: ArrowUp },
+        { id: 'mid', label: 'Centre Third', icon: Rows3 },
+        { id: 'defence', label: 'Defending Third', icon: Shield },
+      ]
+    : [
+        { id: 'full', label: 'Full Field', icon: Maximize2 },
+        { id: 'attack', label: 'Attack Zone', icon: ArrowUp },
+        { id: 'mid', label: 'Mid Zone', icon: Rows3 },
+        { id: 'defence', label: 'Defence Zone', icon: Shield },
+      ]
   const [arrowColorOpen, setArrowColorOpen] = useState(false)
   const [layersOpen, setLayersOpen] = useState(false)
   const arrowColorBtnRef = useRef<HTMLButtonElement>(null)
@@ -216,6 +227,7 @@ export function PlaybookDesignToolbar({
             <div className="flex flex-wrap gap-1">
               {ARROW_TYPES.map((at) => {
                 if (isTouch && at.type === 'freedraw') return null
+                if (isNetball && at.type === 'ruck') return null
                 const isRuck = at.type === 'ruck'
                 const isReposition = at.type === 'reposition'
                 const isFreeDraw = at.type === 'freedraw'

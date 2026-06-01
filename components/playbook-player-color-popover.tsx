@@ -47,6 +47,8 @@ interface PlaybookPlayerColorPopoverProps {
   onClose: () => void
   onRemove: () => void
   position: { left: number; top: number }
+  /** Optional informational note (e.g. netball positional restrictions) */
+  note?: string
 }
 
 export function PlaybookPlayerColorPopover({
@@ -55,6 +57,7 @@ export function PlaybookPlayerColorPopover({
   onClose,
   onRemove,
   position,
+  note,
 }: PlaybookPlayerColorPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -100,6 +103,12 @@ export function PlaybookPlayerColorPopover({
         <p className="mb-2 text-[9px] font-medium uppercase tracking-wide text-[#666]">
           Player colour
         </p>
+
+        {note ? (
+          <p className="mb-2 rounded-md bg-[#15151f] px-2 py-1.5 text-[9px] leading-snug text-[#c084fc]">
+            {note}
+          </p>
+        ) : null}
 
         <div className="space-y-1.5">
           {[PLAYER_COLOR_PRESETS_ROW_1, PLAYER_COLOR_PRESETS_ROW_2].map(
