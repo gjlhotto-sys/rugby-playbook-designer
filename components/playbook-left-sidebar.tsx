@@ -2,6 +2,7 @@
 
 import {
   BookmarkPlus,
+  ClipboardList,
   Cone,
   Tag,
   Plus,
@@ -9,6 +10,7 @@ import {
   Undo2,
   Zap,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import type { PlayerTemplate, FieldPlayer } from '@/lib/types'
 import type { FormationId } from '@/lib/play-metadata'
 import { formatFormationOptionLabel, type SavedFormation } from '@/lib/saved-formations'
@@ -198,6 +200,7 @@ export function PlaybookLeftSidebar({
   sport = 'rugby',
   onSportChange,
 }: PlaybookLeftSidebarProps) {
+  const router = useRouter()
   const isNetball = sport === 'netball'
   const attackOnField = fieldPlayers.filter((p) => p.team === 'attack').length
   const defenseOnField = fieldPlayers.filter((p) => p.team === 'defense').length
@@ -252,12 +255,44 @@ export function PlaybookLeftSidebar({
               <SportSwitcher sport={sport} onSportChange={onSportChange} />
             </div>
           ) : null}
+          {isNetball ? (
+            <button
+              type="button"
+              onClick={() => router.push('/stats')}
+              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+              style={{
+                background: '#1a1a2a',
+                borderColor: '#a855f7',
+                borderWidth: '0.5px',
+                color: '#c084fc',
+              }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+              Match Stats
+            </button>
+          ) : null}
         </div>
       ) : null}
 
       {variant === 'embedded' && onSportChange ? (
         <div className="px-3 pt-3">
           <SportSwitcher sport={sport} onSportChange={onSportChange} />
+          {isNetball ? (
+            <button
+              type="button"
+              onClick={() => router.push('/stats')}
+              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+              style={{
+                background: '#1a1a2a',
+                borderColor: '#a855f7',
+                borderWidth: '0.5px',
+                color: '#c084fc',
+              }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+              Match Stats
+            </button>
+          ) : null}
         </div>
       ) : null}
 
