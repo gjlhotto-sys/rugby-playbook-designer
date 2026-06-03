@@ -27,10 +27,19 @@ export type StatType =
   | 'break'
   | 'contact'
   | 'obstruct'
+  | 'offside'
+  | 'obstruct_hand'
+  | 'obstruct_feet'
+  | 'replay'
+  | 'repossession'
+  | 'held_negative'
+  | 'goal_missed'
   | 'interception'
   | 'tip'
   | 'rebound'
-  | 'score_goal'
+  | 'held_positive'
+  | 'loose_ball'
+  | 'goal_shot'
 
 export const NEGATIVE_STATS: StatType[] = [
   'bad_pass',
@@ -39,27 +48,49 @@ export const NEGATIVE_STATS: StatType[] = [
   'break',
   'contact',
   'obstruct',
+  'offside',
+  'obstruct_hand',
+  'obstruct_feet',
+  'replay',
+  'repossession',
+  'held_negative',
+  'goal_missed',
 ]
 
 export const POSITIVE_STATS: StatType[] = [
   'interception',
   'tip',
   'rebound',
-  'score_goal',
+  'held_positive',
+  'loose_ball',
+  'goal_shot',
 ]
 
 export const STAT_LABELS: Record<StatType, string> = {
   bad_pass: 'Bad Pass',
-  drop_ball: 'Drop Ball',
-  step: 'Step',
+  drop_ball: 'Miss Catch',
+  step: 'Footwork',
   break: 'Break',
   contact: 'Contact',
   obstruct: 'Obstruct',
+  offside: 'Offside',
+  obstruct_hand: 'Obstruct (Hand)',
+  obstruct_feet: 'Obstruct (Feet)',
+  replay: 'Replay',
+  repossession: 'Repossession',
+  held_negative: 'Held',
+  goal_missed: 'Goal Missed',
   interception: 'Interception',
   tip: 'Tip',
   rebound: 'Rebound',
-  score_goal: 'Score Goal',
+  held_positive: 'Held',
+  loose_ball: 'Loose Ball',
+  goal_shot: 'Goal Shot',
 }
+
+/** Goal stats get their own dedicated section (GS/GA only), so they are
+ *  excluded from the generic Faults / Positive button grids. */
+export const GOAL_STATS: StatType[] = ['goal_shot', 'goal_missed']
 
 export interface PlayerEntry {
   position: NetballPosition

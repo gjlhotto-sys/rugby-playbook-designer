@@ -14,6 +14,7 @@ import {
   Zap,
 } from 'lucide-react'
 import {
+  GOAL_STATS,
   MatchData,
   NEGATIVE_STATS,
   NetballPosition,
@@ -34,10 +35,13 @@ import {
 import {
   buildReportHtml,
   buildReportText,
+  computeGoalScoring,
   computeMatchTotals,
   computePlayerStatLines,
+  formatPct,
   getSubstitutionLog,
-} from '@/lib/stats-report'
+  scoringColor,
+} from './report-utils'
 
 type Screen = 'setup' | 'live' | 'report'
 
@@ -543,7 +547,7 @@ function LiveScreen({
     for (const s of match.stats) {
       if (s.playerId === pos && s.playerName === active.name) {
         if (NEGATIVE_STATS.includes(s.stat)) faults += 1
-        if (s.stat === 'score_goal') goals += 1
+        if (s.stat === 'goal_shot') goals += 1
         else if (POSITIVE_STATS.includes(s.stat)) positives += 1
       }
     }
@@ -557,28 +561,35 @@ function LiveScreen({
         className="sticky top-0 z-20 border-b bg-[#161616] px-3 py-2"
         style={{ borderBottomWidth: '0.5px', borderColor: '#2a2a2a' }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[20px] font-bold" style={{ color: ACCENT }}>
+        <div className="flex items-center gap-2">
+          <span className="w-10 text-[20px] font-bold" style={{ color: ACCENT }}>
             Q{match.currentQuarter}
           </span>
-          <span className="font-mono text-[36px] font-bold leading-none text-white tabular-nums">
+          <span className="flex-1 text-center font-mono text-[36px] font-bold leading-none text-white tabular-nums">
             {formatClock(remaining)}
           </span>
-          <div className="text-right text-[11px] leading-tight">
-            <div className="text-[#888]">US — THEM</div>
-            <div className="flex items-center gap-1">
-              <ScoreControl
-                value={match.scores[match.currentQuarter]?.us ?? 0}
-                onAdd={() => adjustScore('us', 1)}
-                onSub={() => adjustScore('us', -1)}
-              />
-              <span className="text-[#555]">—</span>
-              <ScoreControl
-                value={match.scores[match.currentQuarter]?.them ?? 0}
-                onAdd={() => adjustScore('them', 1)}
-                onSub={() => adjustScore('them', -1)}
-              />
-            </div>
+          <span className="w-10" />
+        </div>
+
+        {/* Score controls directly below the timer */}
+        <div className="mt-2 flex justify-center">
+          <div
+            className="flex items-center gap-4 rounded-xl bg-[#1a1a1a]"
+            style={{ padding: '12px 20px' }}
+          >
+            <TeamScore
+              name={match.teamName}
+              value={match.scores[match.currentQuarter]?.us ?? 0}
+              onAdd={() => adjustScore('us', 1)}
+              onSub={() => adjustScore('us', -1)}
+            />
+            <span className="text-[20px] text-[#555]">—</span>
+            <TeamScore
+              name={match.oppositionName}
+              value={match.scores[match.currentQuarter]?.them ?? 0}
+              onAdd={() => adjustScore('them', 1)}
+              onSub={() => adjustScore('them', -1)}
+            />
           </div>
         </div>
 
@@ -666,7 +677,7 @@ function LiveScreen({
                   isViewingCurrent &&
                   setSelectedPos((cur) => (cur === pos ? null : pos))
                 }
-                className="flex h-[72px] min-w-[80px] flex-1 flex-col items-center justify-center rounded-xl px-1 text-center"
+                className="flex h-[64px] min-w-[76px] flex-1 flex-col items-center justify-center rounded-xl px-1 text-center"
                 style={{
                   background: selected ? '#1a0a2a' : '#1a1a1a',
                   border: selected ? `2px solid ${ACCENT}` : '0.5px solid #2a2a2a',
@@ -675,10 +686,10 @@ function LiveScreen({
                 <span className="text-[11px] font-semibold" style={{ color: ACCENT }}>
                   {pos}
                 </span>
-                <span className="w-full truncate px-0.5 text-[14px] text-white">
+                <span className="w-full truncate px-0.5 text-[13px] text-white">
                   {summary.name}
                 </span>
-                <span className="text-[10px]">
+                <span className="text-[9px]">
                   {summary.goals > 0 && (
                     <span className="text-[#86efac]">{summary.goals} goal{summary.goals > 1 ? 's' : ''} </span>
                   )}
@@ -696,35 +707,70 @@ function LiveScreen({
 
         {/* Stat buttons */}
         {selectedPos && isViewingCurrent && (
-          <div className="mb-4">
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-[#f87171]">
-              Faults
-            </p>
-            <div className="mb-3 grid grid-cols-2 gap-2">
-              {NEGATIVE_STATS.map((stat) => (
-                <StatButton
-                  key={stat}
-                  label={STAT_LABELS[stat]}
-                  flash={flashStat === stat}
-                  variant="negative"
-                  onClick={() => recordStat(stat)}
-                />
-              ))}
+          <div className="mb-4 space-y-2">
+            <div>
+              <p className="mb-1 text-[9px] font-medium uppercase tracking-wider text-[#f87171]">
+                Faults
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {NEGATIVE_STATS.filter((s) => !GOAL_STATS.includes(s)).map((stat) => (
+                  <StatButton
+                    key={stat}
+                    label={STAT_LABELS[stat]}
+                    flash={flashStat === stat}
+                    variant="negative"
+                    heightPx={48}
+                    fontPx={13}
+                    onClick={() => recordStat(stat)}
+                  />
+                ))}
+              </div>
             </div>
-            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-[#86efac]">
-              Positive
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {POSITIVE_STATS.map((stat) => (
-                <StatButton
-                  key={stat}
-                  label={STAT_LABELS[stat]}
-                  flash={flashStat === stat}
-                  variant="positive"
-                  onClick={() => recordStat(stat)}
-                />
-              ))}
+            <div>
+              <p className="mb-1 text-[9px] font-medium uppercase tracking-wider text-[#86efac]">
+                Positive
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {POSITIVE_STATS.filter((s) => !GOAL_STATS.includes(s)).map((stat) => (
+                  <StatButton
+                    key={stat}
+                    label={STAT_LABELS[stat]}
+                    flash={flashStat === stat}
+                    variant="positive"
+                    heightPx={48}
+                    fontPx={13}
+                    onClick={() => recordStat(stat)}
+                  />
+                ))}
+              </div>
             </div>
+            {(selectedPos === 'GS' || selectedPos === 'GA') && (
+              <div>
+                <p className="mb-1 text-[9px] font-medium uppercase tracking-wider text-[#f59e0b]">
+                  Goals
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <StatButton
+                    label="Goal Shot ✓"
+                    flash={flashStat === 'goal_shot'}
+                    variant="positive"
+                    heightPx={64}
+                    fontPx={15}
+                    bold
+                    onClick={() => recordStat('goal_shot')}
+                  />
+                  <StatButton
+                    label="Goal Missed ✗"
+                    flash={flashStat === 'goal_missed'}
+                    variant="negative"
+                    heightPx={64}
+                    fontPx={15}
+                    bold
+                    onClick={() => recordStat('goal_missed')}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -821,37 +867,42 @@ function LiveScreen({
   )
 }
 
-function ScoreControl({
+function TeamScore({
+  name,
   value,
   onAdd,
   onSub,
 }: {
+  name: string
   value: number
   onAdd: () => void
   onSub: () => void
 }) {
   return (
-    <span className="flex items-center gap-0.5">
-      <button
-        type="button"
-        onClick={onSub}
-        className="h-5 w-5 rounded bg-[#2a2a2a] text-[12px] leading-none text-[#aaa]"
-        aria-label="Decrease score"
-      >
-        −
-      </button>
-      <span className="min-w-[18px] text-center text-[16px] font-bold text-white tabular-nums">
-        {value}
-      </span>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="h-5 w-5 rounded bg-[#2a2a2a] text-[12px] leading-none text-[#aaa]"
-        aria-label="Increase score"
-      >
-        +
-      </button>
-    </span>
+    <div className="flex flex-col items-center">
+      <div className="mb-1 max-w-[120px] truncate text-[11px] text-[#888]">{name}</div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onSub}
+          className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#2a2a2a] text-[20px] leading-none text-[#aaa] active:opacity-80"
+          aria-label={`Decrease ${name} score`}
+        >
+          −
+        </button>
+        <span className="min-w-[28px] text-center text-[28px] font-bold text-white tabular-nums">
+          {value}
+        </span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex h-11 w-11 items-center justify-center rounded-lg bg-[#2a2a2a] text-[20px] leading-none text-[#aaa] active:opacity-80"
+          aria-label={`Increase ${name} score`}
+        >
+          +
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -860,11 +911,17 @@ function StatButton({
   variant,
   flash,
   onClick,
+  heightPx = 56,
+  fontPx = 14,
+  bold = false,
 }: {
   label: string
   variant: 'negative' | 'positive'
   flash: boolean
   onClick: () => void
+  heightPx?: number
+  fontPx?: number
+  bold?: boolean
 }) {
   const negative = variant === 'negative'
   const base = negative ? '#1f0a0a' : '#0a1f0a'
@@ -873,8 +930,11 @@ function StatButton({
     <button
       type="button"
       onClick={onClick}
-      className="h-[56px] rounded-xl border text-[14px] font-medium transition-colors active:opacity-80"
+      className="rounded-xl border transition-colors active:opacity-80"
       style={{
+        height: heightPx,
+        fontSize: fontPx,
+        fontWeight: bold ? 600 : 500,
         background: flash ? flashBg : base,
         borderColor: negative ? '#f87171' : '#16a34a',
         borderWidth: '0.5px',
@@ -992,6 +1052,7 @@ function ReportScreen({
   const totals = computeMatchTotals(match)
   const lines = computePlayerStatLines(match)
   const subs = getSubstitutionLog(match)
+  const scoring = computeGoalScoring(match)
   const [activeQuarter, setActiveQuarter] = useState(1)
   const allStats: StatType[] = [...NEGATIVE_STATS, ...POSITIVE_STATS]
 
@@ -1038,10 +1099,9 @@ function ReportScreen({
     .map((l) => {
       let faults = 0
       let positives = 0
-      let goals = 0
-      for (const s of NEGATIVE_STATS) faults += l.counts![s]
-      for (const s of POSITIVE_STATS) positives += l.counts![s]
-      goals = l.counts!.score_goal
+      for (const s of NEGATIVE_STATS) faults += l.counts![s] ?? 0
+      for (const s of POSITIVE_STATS) positives += l.counts![s] ?? 0
+      const goals = l.counts!.goal_shot ?? 0
       return { ...l, faults, positives, goals }
     })
     .sort((a, b) => b.faults + b.positives - (a.faults + a.positives))
@@ -1075,6 +1135,22 @@ function ReportScreen({
         <SummaryCard label="Goals" value={totals.usGoals} color="#86efac" />
         <SummaryCard label="Faults" value={totals.totalFaults} color="#f87171" />
         <SummaryCard label="Positives" value={totals.totalPositives} color="#86efac" />
+      </div>
+
+      {/* Goal scoring card */}
+      <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#161616] p-4">
+        <p className="mb-3 text-[16px] font-semibold text-white">Goal Scoring</p>
+        <GoalScoringRow
+          label={`GS — ${scoring.GS.names.join(' / ') || '—'}`}
+          pct={scoring.GS.pct}
+        />
+        <div className="my-2 border-t border-[#2a2a2a]" />
+        <GoalScoringRow
+          label={`GA — ${scoring.GA.names.join(' / ') || '—'}`}
+          pct={scoring.GA.pct}
+        />
+        <div className="my-2 border-t border-[#2a2a2a]" />
+        <GoalScoringRow label="Overall" pct={scoring.overall.pct} emphasis />
       </div>
 
       {/* Per quarter */}
@@ -1200,6 +1276,32 @@ function ReportScreen({
         <ShareButton label="Email" emoji="📧" onClick={emailReport} />
         <ShareButton label="New" emoji="🔄" onClick={handleNewMatch} />
       </div>
+    </div>
+  )
+}
+
+function GoalScoringRow({
+  label,
+  pct,
+  emphasis = false,
+}: {
+  label: string
+  pct: number | null
+  emphasis?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[14px] text-[#aaa]">{label}</span>
+      <span
+        className="font-semibold tabular-nums"
+        style={{
+          fontSize: emphasis ? 18 : 16,
+          fontWeight: emphasis ? 700 : 600,
+          color: scoringColor(pct),
+        }}
+      >
+        {formatPct(pct)}
+      </span>
     </div>
   )
 }
