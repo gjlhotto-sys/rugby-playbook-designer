@@ -15,12 +15,7 @@ const SportContext = createContext<SportContextValue>({
 })
 
 export function SportProvider({ children }: { children: React.ReactNode }) {
-  const [sport, setSport] = useState<Sport>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('playforge-sport') as Sport) ?? 'rugby'
-    }
-    return 'rugby'
-  })
+  const [sport, setSport] = useState<Sport>('rugby')
 
   const handleSetSport = (newSport: Sport) => {
     setSport(newSport)

@@ -219,15 +219,17 @@ export const RugbyField = forwardRef<RugbyFieldHandle, RugbyFieldProps>(function
   const isNetball = sport === "netball"
   const tokenScale =
     (fieldZone === "full" ? 1 : 0.5) * mobileTokenScale
+  const playerScale = isNetball ? 1.15 : 1.0
+  const playerTokenScale = tokenScale * playerScale
   const isZoneFocus = fieldZone !== "full"
   const baseTokenRadius = 1.6
   const basePassHighlightRadius = 2.2
   const baseNumberFontSize = 1
   const baseAbbrFontSize = 0.7
-  const tokenRadius = baseTokenRadius * tokenScale
-  const passHighlightRadius = basePassHighlightRadius * tokenScale
-  const tokenNumberFontSize = baseNumberFontSize * tokenScale
-  const tokenAbbrFontSize = baseAbbrFontSize * tokenScale
+  const tokenRadius = baseTokenRadius * playerTokenScale
+  const passHighlightRadius = basePassHighlightRadius * playerTokenScale
+  const tokenNumberFontSize = baseNumberFontSize * playerTokenScale
+  const tokenAbbrFontSize = baseAbbrFontSize * playerTokenScale
   const ballRx = 1.2 * tokenScale
   const ballRy = 0.8 * tokenScale
   const ballFontSize = 0.5 * tokenScale

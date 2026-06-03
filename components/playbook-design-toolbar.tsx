@@ -228,6 +228,7 @@ export function PlaybookDesignToolbar({
               {ARROW_TYPES.map((at) => {
                 if (isTouch && at.type === 'freedraw') return null
                 if (isNetball && at.type === 'ruck') return null
+                if (isNetball && at.type === 'kick') return null
                 const isRuck = at.type === 'ruck'
                 const isReposition = at.type === 'reposition'
                 const isFreeDraw = at.type === 'freedraw'
