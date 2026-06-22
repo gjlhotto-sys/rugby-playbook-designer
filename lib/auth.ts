@@ -8,6 +8,17 @@ export interface UserProfile {
   full_name?: string
   school?: string
   role: UserRole
+  subscription_status?: string
+}
+
+/** Premium = active subscriber, beta, or admin. */
+export function isPremiumProfile(profile: UserProfile | null): boolean {
+  if (!profile) return false
+  return (
+    profile.role === 'admin' ||
+    profile.role === 'beta' ||
+    (profile.role === 'subscriber' && profile.subscription_status === 'active')
+  )
 }
 
 export async function getUserProfile(): Promise<UserProfile | null> {

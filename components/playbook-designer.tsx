@@ -68,7 +68,7 @@ import {
   SaveFormationModal,
 } from "./playbook-formation-modals"
 import type { UserProfile } from "@/lib/auth"
-import { hasFullAccess } from "@/lib/auth"
+import { isPremiumProfile } from "@/lib/auth"
 
 const STORAGE_KEY = "rugby-playbook"
 const BUFFER = 6
@@ -252,7 +252,16 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     await supabase.auth.signOut()
   }, [])
 
-  const isPremium = hasFullAccess(profile?.role ?? "coach")
+  const isPremium = isPremiumProfile(profile)
+
+  // Show upgrade modal when a free user is redirected from a premium route
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("upgrade") === "stats") {
+      window.history.replaceState({}, "", "/")
+      setShowUpgradeModal(true)
+    }
+  }, [])
 
   // Keyboard shortcut for undo
   useEffect(() => {
@@ -2488,6 +2497,8 @@ export function PlaybookDesigner({ user, profile = null }: PlaybookDesignerProps
     onOpenSaveFormation: () => setShowSaveFormationModal(true),
     onOpenManageFormations: () => setShowManageFormationsModal(true),
     onTouchPlacementDrag: handleTouchPlacementDrag,
+    isPremium,
+    onUpgradeRequest: () => setShowUpgradeModal(true),
   }
 
   const rightSidebarProps = {

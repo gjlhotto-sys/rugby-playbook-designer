@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { getUserProfile, isPremiumProfile } from '@/lib/auth'
 import {
   ArrowLeft,
   Pause,
@@ -69,12 +70,25 @@ export default function RugbyStatsPage() {
 
   useEffect(() => {
     let cancelled = false
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkAccess = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (cancelled) return
-      if (!session) router.push('/login')
-      else setAuthed(true)
+      if (!session) {
+        router.push('/login')
+        return
+      }
+      const profile = await getUserProfile()
+      if (cancelled) return
+      if (!isPremiumProfile(profile)) {
+        router.push('/?upgrade=stats')
+        return
+      }
+      setAuthed(true)
       setAuthChecked(true)
-    })
+    }
+    checkAccess()
     return () => {
       cancelled = true
     }

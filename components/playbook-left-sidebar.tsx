@@ -4,6 +4,7 @@ import {
   BookmarkPlus,
   ClipboardList,
   Cone,
+  Lock,
   Tag,
   Plus,
   Redo2,
@@ -155,6 +156,8 @@ export interface PlaybookLeftSidebarProps {
   onTouchPlacementDrag?: (payload: SidebarTouchPlacementPayload | null) => void
   sport?: Sport
   onSportChange?: (sport: Sport) => void
+  isPremium?: boolean
+  onUpgradeRequest?: () => void
 }
 
 const FORMATIONS: { id: FormationId; label: string }[] = [
@@ -164,6 +167,54 @@ const FORMATIONS: { id: FormationId; label: string }[] = [
   { id: 'kickoff', label: 'Kickoff' },
   { id: 'free-play', label: 'Free Play' },
 ]
+
+function MatchStatsButton({
+  isNetball,
+  isPremium,
+  onNavigate,
+  onUpgradeRequest,
+}: {
+  isNetball: boolean
+  isPremium: boolean
+  onNavigate: () => void
+  onUpgradeRequest?: () => void
+}) {
+  if (!isPremium) {
+    return (
+      <button
+        type="button"
+        onClick={() => onUpgradeRequest?.()}
+        className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+        style={{
+          background: '#1a1a1a',
+          borderColor: '#2a2a2a',
+          borderWidth: '0.5px',
+          color: '#444',
+        }}
+      >
+        <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+        Match Stats 🔒
+      </button>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onNavigate}
+      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+      style={{
+        background: isNetball ? '#1a1a2a' : '#1a2a1a',
+        borderColor: isNetball ? '#a855f7' : '#16a34a',
+        borderWidth: '0.5px',
+        color: isNetball ? '#c084fc' : '#86efac',
+      }}
+    >
+      <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+      Match Stats
+    </button>
+  )
+}
 
 export function PlaybookLeftSidebar({
   attackPlayers,
@@ -199,6 +250,8 @@ export function PlaybookLeftSidebar({
   onTouchPlacementDrag,
   sport = 'rugby',
   onSportChange,
+  isPremium = false,
+  onUpgradeRequest,
 }: PlaybookLeftSidebarProps) {
   const router = useRouter()
   const isNetball = sport === 'netball'
@@ -255,74 +308,24 @@ export function PlaybookLeftSidebar({
               <SportSwitcher sport={sport} onSportChange={onSportChange} />
             </div>
           ) : null}
-          {isNetball ? (
-            <button
-              type="button"
-              onClick={() => router.push('/stats')}
-              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
-              style={{
-                background: '#1a1a2a',
-                borderColor: '#a855f7',
-                borderWidth: '0.5px',
-                color: '#c084fc',
-              }}
-            >
-              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-              Match Stats
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => router.push('/rugby-stats')}
-              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
-              style={{
-                background: '#1a2a1a',
-                borderColor: '#16a34a',
-                borderWidth: '0.5px',
-                color: '#86efac',
-              }}
-            >
-              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-              Match Stats
-            </button>
-          )}
+          <MatchStatsButton
+            isNetball={isNetball}
+            isPremium={isPremium}
+            onNavigate={() => router.push(isNetball ? '/stats' : '/rugby-stats')}
+            onUpgradeRequest={onUpgradeRequest}
+          />
         </div>
       ) : null}
 
       {variant === 'embedded' && onSportChange ? (
         <div className="px-3 pt-3">
           <SportSwitcher sport={sport} onSportChange={onSportChange} />
-          {isNetball ? (
-            <button
-              type="button"
-              onClick={() => router.push('/stats')}
-              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
-              style={{
-                background: '#1a1a2a',
-                borderColor: '#a855f7',
-                borderWidth: '0.5px',
-                color: '#c084fc',
-              }}
-            >
-              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-              Match Stats
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => router.push('/rugby-stats')}
-              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
-              style={{
-                background: '#1a2a1a',
-                borderColor: '#16a34a',
-                borderWidth: '0.5px',
-                color: '#86efac',
-              }}
-            >
-              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
-              Match Stats
-            </button>
-          )}
+          <MatchStatsButton
+            isNetball={isNetball}
+            isPremium={isPremium}
+            onNavigate={() => router.push(isNetball ? '/stats' : '/rugby-stats')}
+            onUpgradeRequest={onUpgradeRequest}
+          />
         </div>
       ) : null}
 
