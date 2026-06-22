@@ -18,6 +18,13 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 text-[12px] text-[#555] sm:flex-row">
         <p className="shrink-0">© 2026 PlayForge. All rights reserved.</p>
         <nav className="flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/getting-started"
+            className="text-[#888] transition-colors hover:text-white"
+          >
+            Getting Started
+          </Link>
+          <span className="text-[#333]">|</span>
           <Link href="/pricing" className="text-[#888] transition-colors hover:text-white">
             Pricing
           </Link>
