@@ -9,6 +9,7 @@ import {
   Play,
   Share2,
   Smartphone,
+  Star,
   Trophy,
   X,
   Zap,
@@ -159,19 +160,19 @@ function FieldMockup() {
     <svg viewBox="0 0 320 200" className="h-auto w-full" role="img" aria-label="PlayForge designer preview">
       {/* panels */}
       <rect x="0" y="0" width="320" height="200" rx="10" fill="#161616" stroke="#2a2a2a" strokeWidth="0.5" />
-      <rect x="0" y="0" width="56" height="200" rx="10" fill="#141414" />
-      <rect x="264" y="0" width="56" height="200" rx="10" fill="#141414" />
+      <rect x="0" y="0" width="46" height="200" rx="10" fill="#141414" />
+      <rect x="274" y="0" width="46" height="200" rx="10" fill="#141414" />
       {/* left panel tokens */}
-      {[28, 50, 72, 94, 116].map((y) => (
+      {[26, 48, 70, 92, 114, 136].map((y) => (
         <g key={`l${y}`}>
-          <circle cx="20" cy={y} r="6" fill="#2563eb" />
-          <rect x="30" y={y - 3} width="18" height="6" rx="2" fill="#222" />
+          <circle cx="16" cy={y} r="6" fill="#2563eb" />
+          <rect x="26" y={y - 3} width="14" height="6" rx="2" fill="#222" />
         </g>
       ))}
       {/* field */}
-      <rect x="62" y="10" width="196" height="180" rx="6" fill="#0a3d12" />
-      {[42, 74, 106, 138, 170].map((x) => (
-        <line key={x} x1={x + 20} y1="12" x2={x + 20} y2="188" stroke="#1c5a26" strokeWidth="1" />
+      <rect x="52" y="8" width="216" height="184" rx="6" fill="#0a3d12" />
+      {[34, 70, 106, 142, 178, 214].map((x) => (
+        <line key={x} x1={x + 18} y1="10" x2={x + 18} y2="190" stroke="#1c5a26" strokeWidth="1" />
       ))}
       <line x1="160" y1="12" x2="160" y2="188" stroke="#2f7a3c" strokeWidth="1.5" />
       {/* arrows */}
@@ -200,9 +201,9 @@ function FieldMockup() {
       ))}
       {/* right panel rows */}
       {[24, 44, 64, 84].map((y) => (
-        <rect key={`r${y}`} x="274" y={y} width="36" height="10" rx="3" fill="#222" />
+        <rect key={`r${y}`} x="282" y={y} width="30" height="10" rx="3" fill="#222" />
       ))}
-      <rect x="274" y="160" width="36" height="14" rx="4" fill="#C0392B" />
+      <rect x="282" y="160" width="30" height="14" rx="4" fill="#C0392B" />
     </svg>
   )
 }
@@ -211,14 +212,38 @@ function FieldMockup() {
 
 function PhoneMockup() {
   return (
-    <svg viewBox="0 0 120 200" className="mx-auto h-40 w-auto" role="img" aria-label="Phone share preview">
-      <rect x="20" y="4" width="80" height="192" rx="14" fill="#1a1a1a" stroke="#2a2a2a" strokeWidth="1" />
-      <rect x="26" y="16" width="68" height="120" rx="6" fill="#0a3d12" />
-      <circle cx="50" cy="70" r="6" fill="#2563eb" />
-      <circle cx="72" cy="90" r="6" fill="#C0392B" />
-      <path d="M50 70 Q62 80 72 90" fill="none" stroke="#EAB308" strokeWidth="2" />
-      <rect x="30" y="146" width="60" height="10" rx="3" fill="#25D366" />
-      <rect x="34" y="164" width="52" height="6" rx="2" fill="#222" />
+    <svg viewBox="0 0 150 200" className="mx-auto h-44 w-auto" role="img" aria-label="WhatsApp share preview">
+      {/* phone frame */}
+      <rect x="25" y="4" width="100" height="192" rx="16" fill="#0b141a" stroke="#2a2a2a" strokeWidth="1.5" />
+      {/* chat header */}
+      <rect x="25" y="4" width="100" height="18" rx="16" fill="#1f2c33" />
+      <rect x="25" y="13" width="100" height="9" fill="#1f2c33" />
+      <circle cx="36" cy="13" r="5" fill="#25D366" />
+      <rect x="45" y="10" width="40" height="5" rx="2" fill="#33434c" />
+      {/* WhatsApp message bubble */}
+      <rect x="33" y="32" width="84" height="118" rx="8" fill="#25D366" />
+      {/* tail */}
+      <path d="M117 40 L123 36 L117 48 Z" fill="#25D366" />
+      {/* message text line 1 */}
+      <text x="40" y="46" fontSize="6.5" fill="#06310f" fontWeight="bold">🏉 Check out our</text>
+      <text x="40" y="55" fontSize="6.5" fill="#06310f" fontWeight="bold">new play!</text>
+      {/* field thumbnail */}
+      <rect x="40" y="60" width="70" height="46" rx="4" fill="#0a3d12" />
+      <line x1="75" y1="62" x2="75" y2="104" stroke="#1c5a26" strokeWidth="1" />
+      <circle cx="55" cy="92" r="4" fill="#2563eb" />
+      <circle cx="92" cy="74" r="4" fill="#C0392B" />
+      <path d="M55 92 Q72 80 92 74" fill="none" stroke="#EAB308" strokeWidth="1.5" markerEnd="url(#wa-arrow)" />
+      <defs>
+        <marker id="wa-arrow" markerWidth="5" markerHeight="5" refX="3" refY="2.5" orient="auto">
+          <path d="M0 0 L5 2.5 L0 5 Z" fill="#EAB308" />
+        </marker>
+      </defs>
+      {/* link */}
+      <text x="40" y="118" fontSize="5.5" fill="#0a4a1a">playforge.co.za/play/abc123</text>
+      {/* tap to watch */}
+      <text x="40" y="130" fontSize="5.8" fill="#06310f" fontWeight="bold">Tap to watch ▶</text>
+      {/* timestamp */}
+      <text x="106" y="144" fontSize="4.5" fill="#0a4a1a" textAnchor="end">09:24 ✓✓</text>
     </svg>
   )
 }
@@ -238,16 +263,31 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 
 export function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
     document.title = 'PlayForge — Rugby & Netball Play Designer for Coaches'
   }, [])
 
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 50)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white">
       {/* NAVBAR */}
-      <nav className="fixed inset-x-0 top-0 z-50 border-b border-[#2a2a2a] bg-[#0f0f0f]/90 backdrop-blur" style={{ borderBottomWidth: '0.5px' }}>
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-3">
+      <nav
+        className="fixed inset-x-0 top-0 z-50 transition-colors duration-300"
+        style={{
+          background: scrolled ? 'rgba(15, 15, 15, 0.95)' : 'transparent',
+          backdropFilter: scrolled ? 'blur(8px)' : 'none',
+          borderBottom: scrolled ? '0.5px solid #2a2a2a' : '0.5px solid transparent',
+        }}
+      >
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <Logo />
           <div className="hidden items-center gap-5 md:flex">
             <Link href="/getting-started" className="text-[14px] text-[#aaa] transition-colors hover:text-white">
@@ -351,9 +391,15 @@ export function LandingPage() {
             </div>
           </FadeIn>
           <FadeIn delay={400}>
-            <div className="relative mx-auto mt-12 max-w-[900px]">
-              <div className="absolute inset-x-8 bottom-0 h-24 rounded-full bg-[#16a34a] opacity-20 blur-3xl" />
-              <div className="relative rounded-2xl border border-[#2a2a2a] bg-[#161616] p-3 shadow-2xl" style={{ borderWidth: '0.5px' }}>
+            <div className="relative mx-auto mt-14 max-w-[1000px]">
+              <div
+                className="relative rounded-2xl border border-[#2a2a2a] bg-[#161616] p-5 sm:p-6"
+                style={{
+                  borderWidth: '0.5px',
+                  boxShadow:
+                    '0 40px 80px rgba(192, 57, 43, 0.15), 0 0 120px rgba(22, 163, 74, 0.08)',
+                }}
+              >
                 <FieldMockup />
               </div>
             </div>
@@ -369,6 +415,23 @@ export function LandingPage() {
               title="Everything a coach needs"
               subtitle="Built from the ground up for rugby and netball coaches"
             />
+          </FadeIn>
+          <FadeIn delay={80}>
+            <div className="mx-auto mb-12 flex max-w-2xl items-stretch justify-center">
+              {[
+                { num: '2', label: 'Sports' },
+                { num: '15+', label: 'Arrow Types' },
+                { num: 'Real-time', label: 'Stats' },
+              ].map((stat, i) => (
+                <div key={stat.label} className="flex items-center">
+                  {i > 0 && <div className="mx-5 h-10 w-px bg-[#2a2a2a] sm:mx-8" />}
+                  <div className="text-center">
+                    <div className="text-[24px] font-bold text-white sm:text-[32px]">{stat.num}</div>
+                    <div className="mt-0.5 text-[12px] text-[#666]">{stat.label}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </FadeIn>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => {
@@ -451,23 +514,30 @@ export function LandingPage() {
       </section>
 
       {/* SECTION 5: SOCIAL PROOF */}
-      <section className="bg-[#080808] px-5 py-20">
-        <div className="mx-auto max-w-3xl">
+      <section className="bg-[#080808]" style={{ padding: '80px 24px' }}>
+        <div className="mx-auto max-w-[700px] text-center">
           <FadeIn>
-            <SectionHeading title="Built for coaches, by a coach" />
+            <div
+              className="leading-none text-[#C0392B]"
+              style={{ fontFamily: 'Georgia, serif', fontSize: '72px' }}
+            >
+              &ldquo;
+            </div>
+            <p className="-mt-4 italic text-[#ccc]" style={{ fontSize: '20px', lineHeight: 1.7 }}>
+              PlayForge has completely changed how I prepare my team. I can build a play in minutes and share it to the WhatsApp group before the players even get home from training.
+            </p>
+            <p className="text-[14px] text-[#555]" style={{ marginTop: '16px' }}>
+              — Rugby Coach, Western Cape
+            </p>
+            <div className="mt-5 flex items-center justify-center gap-1">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star key={i} className="h-5 w-5" fill="#f59e0b" style={{ color: '#f59e0b' }} strokeWidth={0} />
+              ))}
+            </div>
+            <p className="mt-4 text-[13px] text-[#444]">
+              Trusted by coaches at schools across South Africa
+            </p>
           </FadeIn>
-          <FadeIn delay={80}>
-            <blockquote className="mx-auto max-w-[700px] rounded-2xl border border-[#2a2a2a] bg-[#161616] p-10" style={{ borderWidth: '0.5px' }}>
-              <span className="text-[40px] font-serif leading-none text-[#C0392B]">“</span>
-              <p className="mt-2 text-[18px] italic text-[#ccc]" style={{ lineHeight: 1.7 }}>
-                PlayForge has completely changed how I prepare my team. I can build a play in minutes and share it to the WhatsApp group before the players even get home from training.
-              </p>
-              <footer className="mt-4 text-[14px] text-[#666]">— Rugby Coach, Western Cape</footer>
-            </blockquote>
-          </FadeIn>
-          <p className="mt-8 text-center text-[12px] text-[#555]">
-            Trusted by coaches at schools across South Africa
-          </p>
         </div>
       </section>
 
@@ -481,7 +551,7 @@ export function LandingPage() {
             <FadeIn>
               <div className="flex h-full flex-col rounded-2xl border border-[#2a2a2a] bg-[#161616] p-6" style={{ borderWidth: '0.5px' }}>
                 <h3 className="text-[16px] font-semibold text-white">Free Forever</h3>
-                <p className="mt-2 text-[32px] font-extrabold text-white">R0</p>
+                <p className="mt-2 text-[32px] font-extrabold text-white">Free</p>
                 <p className="mt-2 text-[14px] text-[#888]">3 saved plays, basic designer</p>
                 <Link
                   href="/login"
