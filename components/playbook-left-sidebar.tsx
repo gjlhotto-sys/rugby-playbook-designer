@@ -270,7 +270,22 @@ export function PlaybookLeftSidebar({
               <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
               Match Stats
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => router.push('/rugby-stats')}
+              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+              style={{
+                background: '#1a2a1a',
+                borderColor: '#16a34a',
+                borderWidth: '0.5px',
+                color: '#86efac',
+              }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+              Match Stats
+            </button>
+          )}
         </div>
       ) : null}
 
@@ -292,7 +307,22 @@ export function PlaybookLeftSidebar({
               <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
               Match Stats
             </button>
-          ) : null}
+          ) : (
+            <button
+              type="button"
+              onClick={() => router.push('/rugby-stats')}
+              className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md border px-2.5 py-2 text-[11px] font-medium transition-colors hover:opacity-90"
+              style={{
+                background: '#1a2a1a',
+                borderColor: '#16a34a',
+                borderWidth: '0.5px',
+                color: '#86efac',
+              }}
+            >
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={2} />
+              Match Stats
+            </button>
+          )}
         </div>
       ) : null}
 
