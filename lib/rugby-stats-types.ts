@@ -35,6 +35,7 @@ export type RugbyStatType =
   | 'try_scored'
   | 'try_assist'
   | 'clean_break'
+  | 'ruck_joined'
   // Defensive
   | 'tackle_made'
   | 'tackle_missed'
@@ -85,6 +86,7 @@ export const RUGBY_STAT_GROUPS: Record<
       'carry', 'meters_5', 'meters_10',
       'meters_20', 'line_break', 'offload',
       'try_scored', 'try_assist', 'clean_break',
+      'ruck_joined',
     ],
   },
   defensive: {
@@ -95,6 +97,7 @@ export const RUGBY_STAT_GROUPS: Record<
     stats: [
       'tackle_made', 'tackle_missed',
       'turnover_won', 'intercept',
+      'ruck_joined',
     ],
   },
   set_piece: {
@@ -148,6 +151,7 @@ export const RUGBY_STAT_LABELS: Record<RugbyStatType, string> = {
   try_scored: 'Try',
   try_assist: 'Try Assist',
   clean_break: 'Clean Break',
+  ruck_joined: 'Ruck Joined',
   tackle_made: 'Tackle Made',
   tackle_missed: 'Tackle Missed',
   turnover_won: 'Turnover Won',
